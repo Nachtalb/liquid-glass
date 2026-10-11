@@ -708,6 +708,25 @@
           </article>
 
           <article class="card">
+            <div class="stage" style="--x: -60px; --y: -600px" data-snippet>
+              <button class="lg-btn lg-round" data-glass interestfor="tip-add" aria-label="Add">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+              <div class="lg-tip" data-glass popover="hint" id="tip-add">Add to library</div>
+            </div>
+            <div class="meta">
+              <h3>Tooltip</h3>
+              <p>
+                Hover or focus the button. <code>interestfor</code> opens a <code>popover="hint"</code> anchored above
+                it, with no script in current Chrome.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage paper" style="--x: -40px; --y: -40px" data-snippet>
               <div class="stack">
                 <label class="opt"><lg-switch name="wifi" checked></lg-switch> Wi-Fi</label>
@@ -1074,6 +1093,13 @@
                   </td>
                 </tr>
                 <tr>
+                  <td>.lg-tip</td>
+                  <td>
+                    On a <code>popover="hint"</code> element, opened by <code>interestfor="id"</code> on its trigger.
+                    Sits above it, flips below when there is no room.
+                  </td>
+                </tr>
+                <tr>
                   <td>.lg-field · .lg-panel · .lg-menu</td>
                   <td>Search field, container, popover menu</td>
                 </tr>
@@ -1103,14 +1129,14 @@
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">23.7 KB</span> · <span data-size="gzip">8.1 KB</span> gzipped</small
+                >Minified · <span data-size="min">24.8 KB</span> · <span data-size="gzip">8.4 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">35.1 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">36.7 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">8.1 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">8.4 KB</span> gzipped.</span>
         </div>
       </section>
     </main>

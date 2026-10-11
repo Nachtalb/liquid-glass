@@ -804,8 +804,17 @@ lg-dots {
   & svg { width: 1.25em; height: 1.25em; }
   & > hr { all: unset; align-self: stretch; width: 1px; margin: .45em .2em; background: currentColor; opacity: .2; }
 }
+.lg-tip {
+  position: fixed; inset: auto; margin: .5em 0; position-area: block-start; position-try-fallbacks: flip-block;
+  border: 0; padding: .4em .75em; border-radius: .9em; max-width: 18em; font-size: .85em;
+  --lg-blur: 4; --lg-tint: light-dark(rgb(250 250 252 / .6), rgb(30 31 35 / .6)); color: light-dark(#111, #f4f4f5);
+  transform-origin: bottom center; scale: .5;
+  transition: scale .15s ease-in, display .15s allow-discrete, overlay .15s allow-discrete;
+  &:popover-open { scale: 1; transition: scale .4s var(--lg-spring), display .4s allow-discrete, overlay .4s allow-discrete; }
+  @starting-style { &:popover-open { scale: .5; } }
+}
 @media (prefers-reduced-motion: reduce) {
-  .lg-btn, .lg-menu, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
+  .lg-btn, .lg-menu, .lg-tip, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
 }
 }`;
 
@@ -845,4 +854,25 @@ if (globalThis.document) {
     const toggle = e.target.closest?.('.lg-toolbar > [aria-pressed]');
     if (toggle) toggle.ariaPressed = toggle.ariaPressed !== 'true';
   });
+
+  // Tooltips: interestfor opens a popover="hint" on hover and focus natively; this mirrors it where unsupported.
+  if (!('interestForElement' in HTMLButtonElement.prototype)) {
+    let timer;
+    const watch = (types, delay, act) =>
+      types.forEach(type =>
+        document.addEventListener(type, e => {
+          const invoker = e.target.closest?.('[interestfor]'),
+            tip = invoker && document.getElementById(invoker.getAttribute('interestfor'));
+          if (!tip || invoker.contains(e.relatedTarget)) return; // moving within the invoker
+          clearTimeout(timer);
+          timer = setTimeout(() => act(tip, invoker), delay);
+        }),
+      );
+    watch(['pointerover', 'focusin'], 500, (tip, source) => {
+      if (!tip.matches(':popover-open')) tip.showPopover({ source });
+    });
+    watch(['pointerout', 'focusout'], 250, tip => {
+      if (tip.matches(':popover-open')) tip.hidePopover();
+    });
+  }
 }
