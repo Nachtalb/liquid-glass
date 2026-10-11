@@ -666,13 +666,14 @@ class LgSegmented extends Base {
     });
     this.style.setProperty('--n', items.length);
     this.style.setProperty('--i', i);
-    if (this.index != null && i !== this.index) {
+    const moved = this.index != null && i !== this.index;
+    this.index = i; // before change fires, so listeners read the new value
+    if (moved) {
       this.toggleAttribute('data-moving', true); // indicator swells into a lens while it travels
       if (fromUser) this.dispatchEvent(new Event('change', { bubbles: true }));
     }
     clearTimeout(this.t);
     this.t = setTimeout(() => this.settle(), 700); // in case no translate transition runs
-    this.index = i;
   }
   get value() {
     return this.index;
