@@ -525,6 +525,9 @@
           }
         }
       }
+      .stage.app {
+        justify-content: flex-start;
+      }
       .fine-print {
         margin: 0;
         font: 11px var(--mono);
@@ -1076,6 +1079,59 @@
           </article>
 
           <article class="card">
+            <div class="stage app" style="--x: -880px; --y: -80px" data-snippet>
+              <lg-segmented data-glass aria-orientation="vertical" aria-label="Library">
+                <button>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="8" />
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                  </svg>
+                  Bench
+                </button>
+                <button>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <rect x="4" y="4" width="7" height="7" rx="2" />
+                    <rect x="13" y="4" width="7" height="7" rx="2" />
+                    <rect x="4" y="13" width="7" height="7" rx="2" />
+                    <rect x="13" y="13" width="7" height="7" rx="2" />
+                  </svg>
+                  Charts
+                </button>
+                <button>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="8" />
+                    <path d="M8 12a4 4 0 0 1 4-4" />
+                  </svg>
+                  Lenses
+                </button>
+                <button>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M7 3h7l4 4v14H7z" />
+                    <path d="M14 3v4h4M10 12h5M10 16h5" />
+                  </svg>
+                  Reports
+                </button>
+              </lg-segmented>
+            </div>
+            <div class="meta">
+              <h3>Floating sidebar</h3>
+              <p>
+                A segmented control with <code>aria-orientation="vertical"</code>: the same lens, travelling down. Tap,
+                drag or use the arrow keys; links instead of buttons make it page navigation.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage" style="--x: -120px; --y: -610px" data-snippet>
               <label class="lg-field" data-glass style="width: min(100%, 300px)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -1410,7 +1466,7 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
                   <td>&lt;lg-segmented&gt;</td>
                   <td>
                     Children are the segments. <code>.value</code> = selected index, fires <code>change</code>. Add
-                    <code>.lg-tabbar</code> for icon tabs.
+                    <code>.lg-tabbar</code> for icon tabs, <code>aria-orientation="vertical"</code> for a sidebar.
                   </td>
                 </tr>
                 <tr>
@@ -1510,14 +1566,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">38.6 KB</span> · <span data-size="gzip">11.8 KB</span> gzipped</small
+                >Minified · <span data-size="min">39.3 KB</span> · <span data-size="gzip">12.0 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">55.2 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">56.1 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">11.8 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">12.0 KB</span> gzipped.</span>
         </div>
       </section>
     </main>

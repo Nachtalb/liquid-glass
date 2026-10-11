@@ -320,17 +320,17 @@ function build(host, html) {
   return input;
 }
 
-// Horizontal drag: move(e) once past 4px, end(e, dragged) on release or cancel. A touch drag fires no
-// click afterwards and a mouse drag does, so callers act in end() and swallowClick() the leftover.
-function onDrag(host, move, end) {
+// Drag along axis ('clientX' or 'clientY'): move(e) once past 4px, end(e, dragged) on release or cancel. A touch
+// drag fires no click afterwards and a mouse drag does, so callers act in end() and swallowClick() the leftover.
+function onDrag(host, move, end, axis = 'clientX') {
   host.addEventListener('pointerdown', e => {
     if (e.button || host.querySelector(':disabled')) return;
     const t = e.target,
-      x0 = e.clientX;
+      x0 = e[axis];
     let dragged = false;
     t.setPointerCapture(e.pointerId); // on the pressed element, so a plain tap still clicks it
     const mv = ev => {
-      if ((dragged ||= Math.abs(ev.clientX - x0) > 4)) move(ev);
+      if ((dragged ||= Math.abs(ev[axis] - x0) > 4)) move(ev);
     };
     const up = ev => {
       for (const [type, fn] of [
@@ -360,15 +360,16 @@ function swallowClick(el) {
   setTimeout(() => el.removeEventListener('click', eat, true));
 }
 
-// Squash & stretch from horizontal speed, relaxing once movement stops. Feed it pointer x.
-function jelly(el) {
+// Squash & stretch from speed along one axis, relaxing once movement stops. Feed it the pointer coordinate.
+function jelly(el, vertical) {
   let s = 0,
     x0,
     t0,
     raf = 0;
   const tick = () => {
     s *= 0.82;
-    el.style.transform = s > 0.004 ? `scale(${1 + s}, ${1 - s / 2})` : '';
+    el.style.transform =
+      s > 0.004 ? (vertical ? `scale(${1 - s / 2}, ${1 + s})` : `scale(${1 + s}, ${1 - s / 2})`) : '';
     raf = s > 0.004 ? requestAnimationFrame(tick) : 0;
   };
   return x => {
@@ -455,8 +456,12 @@ class LgSegmented extends Base {
       const i = this.items.findIndex(c => c.contains(e.target));
       if (i >= 0) this.select(i, true);
     });
+    const v = this.ariaOrientation === 'vertical',
+      [axis, start, size, pad] = v
+        ? ['clientY', 'top', 'height', 'paddingTop']
+        : ['clientX', 'left', 'width', 'paddingLeft'];
     this.addEventListener('keydown', e => {
-      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      const d = (v ? { ArrowDown: 1, ArrowUp: -1 } : { ArrowRight: 1, ArrowLeft: -1 })[e.key];
       if (!d || this.role !== 'tablist') return;
       e.preventDefault();
       this.select(this.index + d, true);
@@ -464,19 +469,19 @@ class LgSegmented extends Base {
     });
     // the lens sinks back under the labels once it has arrived
     this.ind.addEventListener('transitionend', e => e.propertyName === 'translate' && this.settle());
-    const squish = jelly(this.ind);
+    const squish = jelly(this.ind, v);
     let f = 0;
     onDrag(
       this,
       e => {
         const r = this.getBoundingClientRect(),
-          pad = parseFloat(getComputedStyle(this).paddingLeft),
+          p = parseFloat(getComputedStyle(this)[pad]),
           n = this.items.length;
-        f = Math.max(0, Math.min(n - 1, ((e.clientX - r.left - pad) / (r.width - 2 * pad)) * n - 0.5));
+        f = Math.max(0, Math.min(n - 1, ((e[axis] - r[start] - p) / (r[size] - 2 * p)) * n - 0.5));
         this.style.setProperty('--i', f);
         this.toggleAttribute('data-dragging', true);
         this.toggleAttribute('data-moving', true);
-        squish(e.clientX);
+        squish(e[axis]);
       },
       (e, dragged) => {
         if (!dragged) return;
@@ -485,6 +490,7 @@ class LgSegmented extends Base {
         this.items[Math.round(f)].click(); // same path as a tap: selects, follows links, runs your handlers
         swallowClick(this);
       },
+      axis,
     );
     this.select(
       Math.max(
@@ -943,6 +949,13 @@ lg-segmented {
   &[data-dragging] .lg-indicator { transition: scale .35s var(--lg-spring), background-color .15s, z-index 0s; }
   &.lg-tabbar > :not(.lg-indicator) { flex-direction: column; gap: .15em; padding: .45em 1.2em; font-size: .72em; font-weight: 500; }
   &.lg-tabbar svg { width: 2em; height: 2em; }
+  /* a sidebar: rows instead of columns, the lens travels down */
+  &[aria-orientation=vertical] {
+    display: grid; grid-auto-flow: row; grid-auto-rows: minmax(0, 1fr); border-radius: 1.25em; touch-action: pan-x;
+    & > :not(.lg-indicator) { justify-content: flex-start; gap: .6em; }
+    & svg { width: 1.25em; height: 1.25em; flex: none; }
+    & .lg-indicator { inset: .25em .25em auto; width: auto; height: calc((100% - .5em) / var(--n)); translate: 0 calc(var(--i) * 100%); border-radius: 1em; }
+  }
 }
 lg-stepper {
   position: relative; display: inline-flex; vertical-align: middle; height: 2.3em; border-radius: 999px; user-select: none;
