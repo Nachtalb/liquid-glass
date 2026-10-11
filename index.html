@@ -171,6 +171,9 @@
       .topbar > .lg-btn {
         flex: none; /* on phones the field gives way, not the buttons */
       }
+      .topbar .lg-field[data-floating] {
+        --lg-tint: rgb(22 24 27 / 0.8); /* keeps its hero look, readable over the light page too */
+      }
       .topbar .gh svg {
         width: 1.15em;
         height: 1.15em;
@@ -1816,6 +1819,22 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
           card.hidden = !!q && !card.querySelector('h3').textContent.toLowerCase().includes(q);
         if (q) $('#components').scrollIntoView({ behavior: 'smooth' });
       });
+      // While in use the field floats where it sits, above everything, so it stays put as the results scroll in.
+      // The topbar is right-aligned behind it, so nothing shifts when it leaves the flow.
+      const field = $('#q').closest('.lg-field'),
+        floating = ['position', 'top', 'left', 'width', 'z-index'];
+      const float = on => {
+        if (on === field.hasAttribute('data-floating')) return;
+        field.toggleAttribute('data-floating', on);
+        if (!on) return floating.forEach(p => field.style.removeProperty(p));
+        const r = field.getBoundingClientRect();
+        [`fixed`, `${Math.max(12, r.top)}px`, `${r.left}px`, `${r.width}px`, 50].forEach((v, i) =>
+          field.style.setProperty(floating[i], v),
+        );
+      };
+      $('#q').addEventListener('focus', () => float(true));
+      $('#q').addEventListener('blur', e => float(!!e.target.value));
+
       const lens = $('#bench').lens; // the hero is an <lg-magnifier drag>
 
       // Toast card
