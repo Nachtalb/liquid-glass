@@ -485,6 +485,31 @@
         text-transform: uppercase;
         cursor: context-menu;
       }
+      .lg-sheet header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75em;
+      }
+      .lg-sheet h2 {
+        margin: 0;
+        font-size: 1.25em;
+      }
+      .lg-sheet dl {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        margin: 0;
+        overflow: auto;
+      }
+      .lg-sheet :is(dt, dd) {
+        margin: 0;
+        padding: 0.75em 0;
+        border-top: 1px solid rgb(127 127 127 / 0.2);
+      }
+      .lg-sheet dd {
+        font-family: var(--mono);
+        text-align: right;
+      }
 
       /* download */
       .get {
@@ -973,6 +998,50 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
           </article>
 
           <article class="card">
+            <div class="stage" style="--x: -1030px; --y: -300px" data-snippet>
+              <button class="lg-btn" data-glass commandfor="sheet" command="show-modal">Lens report</button>
+              <dialog class="lg-sheet" data-glass closedby="any" id="sheet">
+                <header>
+                  <h2>Lens 2</h2>
+                  <button class="lg-btn" commandfor="sheet" command="close">Done</button>
+                </header>
+                <dl>
+                  <dt>Focal length</dt>
+                  <dd>50 mm</dd>
+                  <dt>Aperture</dt>
+                  <dd>f/1.8</dd>
+                  <dt>Wavefront error</dt>
+                  <dd>0.04 λ RMS</dd>
+                  <dt>Strehl ratio</dt>
+                  <dd>0.94</dd>
+                  <dt>MTF at 50 lp/mm</dt>
+                  <dd>0.62</dd>
+                  <dt>Distortion</dt>
+                  <dd>0.3 %</dd>
+                  <dt>Vignetting</dt>
+                  <dd>0.8 EV</dd>
+                  <dt>Elements</dt>
+                  <dd>7 in 6 groups</dd>
+                  <dt>Coating</dt>
+                  <dd>MgF₂</dd>
+                  <dt>Bench temperature</dt>
+                  <dd>21.4 °C</dd>
+                  <dt>Calibrated</dt>
+                  <dd>3 Oct 2026</dd>
+                </dl>
+              </dialog>
+            </div>
+            <div class="meta">
+              <h3>Sheet</h3>
+              <p>
+                Opens at half height. Drag it up to full height, or pull or flick it down to dismiss. It's a native
+                modal <code>&lt;dialog&gt;</code>, so Escape and a tap outside close it too.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage paper" style="--x: -610px; --y: -90px" data-snippet>
               <div class="orb" data-glass style="--lg-zoom: 1.8; --lg-profile: circle"></div>
               <span data-glass style="border-radius: 14px; padding: 8px 14px; --lg-blur: 3">Any element</span>
@@ -1191,6 +1260,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
                   </td>
                 </tr>
                 <tr>
+                  <td>.lg-sheet</td>
+                  <td>
+                    On a <code>&lt;dialog&gt;</code> opened with <code>showModal()</code>. Detents: half and full
+                    height; <code>height: auto</code> fits the content. Give a long child <code>overflow: auto</code> to
+                    scroll it; <code>closedby="any"</code> closes on a tap outside.
+                  </td>
+                </tr>
+                <tr>
                   <td>.lg-tip</td>
                   <td>
                     On a <code>popover="hint"</code> element, opened by <code>interestfor="id"</code> on its trigger.
@@ -1227,14 +1304,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">28.1 KB</span> · <span data-size="gzip">9.1 KB</span> gzipped</small
+                >Minified · <span data-size="min">30.4 KB</span> · <span data-size="gzip">9.8 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">41.2 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">44.7 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">9.1 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">9.8 KB</span> gzipped.</span>
         </div>
       </section>
     </main>

@@ -865,21 +865,35 @@ lg-dots {
 .lg-alert {
   position: fixed; /* [data-glass] sets relative, which would pin a modal to the top of the page */
   border: 0; padding: 1.3em 1.2em 1.1em; border-radius: 1.75em; width: min(19em, calc(100vw - 2em)); text-align: center;
-  --lg-blur: 6; --lg-tint: light-dark(rgb(250 250 252 / .7), rgb(36 37 41 / .7)); color: light-dark(#111, #f4f4f5);
   scale: .92; transition: scale .15s ease-in, display .15s allow-discrete, overlay .15s allow-discrete;
   &[open] { scale: 1; transition: scale .5s var(--lg-spring), display .5s allow-discrete, overlay .5s allow-discrete; }
   @starting-style { &[open] { scale: 1.12; } }
-  &::backdrop { background: transparent; transition: background-color .25s, display .25s allow-discrete, overlay .25s allow-discrete; }
-  &[open]::backdrop { background: rgb(0 0 0 / .3); }
-  @starting-style { &[open]::backdrop { background: transparent; } }
   & h2 { margin: 0 0 .35em; font-size: 1.05em; }
   & p { margin: 0 0 1.1em; font-size: .9em; opacity: .8; }
   & form { display: flex; gap: .5em; }
   & form > * { flex: 1; }
+}
+:is(.lg-alert, .lg-sheet) {
+  --lg-blur: 6; --lg-tint: light-dark(rgb(250 250 252 / .7), rgb(36 37 41 / .7)); color: light-dark(#111, #f4f4f5);
+  &::backdrop { background: transparent; transition: background-color .25s, display .25s allow-discrete, overlay .25s allow-discrete; }
+  &[open]::backdrop { background: rgb(0 0 0 / .3); }
+  @starting-style { &[open]::backdrop { background: transparent; } }
   & .lg-btn:not(.lg-tinted) { background-color: rgb(127 127 127 / .2); }
 }
+.lg-sheet {
+  /* as tall as the large detent and opens at the medium one (top half of the screen); height: auto sizes it to the content */
+  position: fixed; inset: auto .5em .5em; margin: 0 auto; width: auto; max-width: 36em; height: calc(100dvh - 3em); max-height: none;
+  border: 0; padding: 1.75em 1.25em 1.25em; border-radius: 2em; overflow: hidden; touch-action: none; user-select: none;
+  translate: 0 calc(100% + 1em);
+  transition: translate .3s cubic-bezier(.4, 0, 1, 1), display .3s allow-discrete, overlay .3s allow-discrete;
+  /* --lg-detent: offset from fully open, set by the drag */
+  &[open] { display: flex; flex-direction: column; translate: 0 var(--lg-detent, max(0px, 100% - 50dvh)); transition: translate .5s var(--lg-glide), display .5s allow-discrete, overlay .5s allow-discrete; }
+  @starting-style { &[open] { translate: 0 calc(100% + 1em); } }
+  &[data-dragging] { transition: none; }
+  &::after { content: ''; position: absolute; top: .6em; left: 50%; width: 2.5em; height: .3em; translate: -50%; border-radius: 1em; background: currentColor; opacity: .25; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .lg-btn, .lg-menu, .lg-tip, .lg-toast, .lg-alert, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
+  .lg-btn, .lg-menu, .lg-tip, .lg-toast, .lg-alert, .lg-sheet, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
 }
 }`;
 
@@ -939,6 +953,59 @@ if (globalThis.document) {
     if (e.buttons) addEventListener('pointerup', () => setTimeout(open), { once: true });
     else open();
   });
+
+  // Sheets: drag between the large detent and the medium one (half the screen); pull or flick down to dismiss.
+  // Only translate changes, so the glass map isn't re-rendered while dragging.
+  document.addEventListener('pointerdown', e => {
+    const sheet = e.target.closest?.('.lg-sheet[open]');
+    if (!sheet || e.button || e.target.closest('a, button, input, select, textarea, label, [contenteditable]')) return;
+    const r = sheet.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return; // ::backdrop
+    for (let n = e.target; n !== sheet; n = n.parentElement)
+      if (n.scrollHeight > n.clientHeight && /auto|scroll/.test(getComputedStyle(n).overflowY)) return; // let it scroll
+    const h = sheet.offsetHeight,
+      y0 = r.top - sheet.offsetTop; // current offset: the box moved by translate, offsetTop ignores it
+    let y = y0,
+      v = 0,
+      last = e;
+    const move = ev => {
+      const d = y0 + ev.clientY - e.clientY;
+      y = d < 0 ? -Math.sqrt(-d) * 2 : d; // rubber band past fully open
+      v = (ev.clientY - last.clientY) / Math.max(1, ev.timeStamp - last.timeStamp);
+      last = ev;
+      sheet.style.setProperty('--lg-detent', `${y}px`);
+    };
+    const up = ev => {
+      for (const [type, fn] of [
+        ['pointermove', move],
+        ['pointerup', up],
+        ['pointercancel', up],
+      ])
+        sheet.removeEventListener(type, fn);
+      sheet.removeAttribute('data-dragging');
+      if (ev.timeStamp - last.timeStamp > 100) v = 0; // held still before letting go
+      const aim = y + v * 250; // where the flick would carry it
+      const stop = [0, Math.max(0, h - innerHeight / 2), h].reduce((a, b) =>
+        Math.abs(b - aim) < Math.abs(a - aim) ? b : a,
+      );
+      if (stop === h) sheet.close();
+      else sheet.style.setProperty('--lg-detent', `${stop}px`);
+    };
+    sheet.setPointerCapture(e.pointerId);
+    sheet.toggleAttribute('data-dragging', true);
+    for (const [type, fn] of [
+      ['pointermove', move],
+      ['pointerup', up],
+      ['pointercancel', up],
+    ])
+      sheet.addEventListener(type, fn);
+  });
+  // the next open starts at the medium detent again; close doesn't bubble, so listen in the capture phase
+  document.addEventListener(
+    'close',
+    e => e.target.matches?.('.lg-sheet') && e.target.style.removeProperty('--lg-detent'),
+    true,
+  );
 
   // Tooltips: interestfor opens a popover="hint" on hover and focus natively; this mirrors it where unsupported.
   if (!('interestForElement' in HTMLButtonElement.prototype)) {
