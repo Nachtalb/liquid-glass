@@ -415,10 +415,10 @@ export function glass(el, opts = {}) {
     // set on every glass element, so a nested one doesn't inherit its ancestor's
     el.style.setProperty('--lg-inset', `${by}px ${w - bx - bw}px ${h - by - bh}px ${bx}px`);
     fe.zoomed?.setAttribute('scale', m.zscale);
-    // feDisplacementMap picks the nearest source pixel, so magnified content steps; a blur sized to the
+    // feDisplacementMap picks the nearest source pixel, so zoomed content (in or out) steps; a blur sized to the
     // magnification (in device px) smooths it like bilinear sampling would. Folded into the frost blur.
     // a zoom-wide pixel step needs σ ≈ 0.45 × zoom; Skia's CPU blur ignores σ under ~0.8 device px
-    const aa = o.zoom > 1 ? (Math.max(0.8, 0.45 * o.zoom) * o.antialias) / (devicePixelRatio || 1) : 0;
+    const aa = o.zoom !== 1 ? (Math.max(0.8, 0.45 * o.zoom) * o.antialias) / (devicePixelRatio || 1) : 0;
     fe.blur.setAttribute('stdDeviation', Math.hypot(o.blur, aa));
     fe.refracted.setAttribute('scale', m.scale * o.refraction);
     fe.saturated.setAttribute('values', o.saturation);
@@ -1069,11 +1069,11 @@ lg-switch {
   &:has(:disabled) { filter: grayscale(1) opacity(.5); }
   & input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
   & .lg-thumb {
-    /* pressed it's a clear magnifier ~1.9× the track's height, like iOS: a narrow rim, a flat zoomed middle, so the
-       track shows through enlarged with the background around it. Rests squashed down to the usual knob */
-    --lg-bezel: 6; --lg-zoom: 1.35; --lg-blur: 0; --lg-specular: .9;
-    position: absolute; top: 50%; left: calc(1.34em + (100% - 2.68em) * var(--lg-f)); width: 4.5em; height: 3.3em; border-radius: 1.65em;
-    translate: -50% -50%; scale: .54 .45; background: #fff; box-shadow: 0 .1em .5em rgb(0 0 0 / .2); pointer-events: none;
+    /* pressed it's a clear lens like iOS (proportions measured off it): the middle shrinks the track a little,
+       a wide convex rim bends it back out to the edge, so the green flows in from the track as one shape */
+    --lg-bezel: 11; --lg-zoom: .9; --lg-blur: 0; --lg-specular: .9;
+    position: absolute; top: 50%; left: calc(1.34em + (100% - 2.68em) * var(--lg-f)); width: 3.8em; height: 2.45em; border-radius: 1.225em;
+    translate: -50% -50%; scale: .62; background: #fff; box-shadow: 0 .1em .5em rgb(0 0 0 / .2); pointer-events: none;
     transition: scale .5s var(--lg-spring), background-color .2s;
   }
   &:has(input:active) .lg-thumb { scale: 1; background: rgb(255 255 255 / .06); }
