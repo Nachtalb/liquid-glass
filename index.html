@@ -465,6 +465,20 @@
         translate: -50% 0;
       }
 
+      /* context menu demo */
+      .ctx-zone {
+        align-self: stretch;
+        flex: 1;
+        display: grid;
+        place-items: center;
+        border: 1px dashed rgb(255 255 255 / 0.4);
+        border-radius: 16px;
+        font: 500 12px var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: context-menu;
+      }
+
       /* download */
       .get {
         display: flex;
@@ -879,6 +893,25 @@
           </article>
 
           <article class="card">
+            <div class="stage" style="--x: -880px; --y: -170px" data-snippet>
+              <div class="ctx-zone" data-contextmenu="ctx" tabindex="0">Right-click or long-press</div>
+              <div class="lg-menu" data-glass popover id="ctx">
+                <button>Copy</button><button>Paste</button><button>Duplicate</button>
+                <hr />
+                <button>Delete</button>
+              </div>
+            </div>
+            <div class="meta">
+              <h3>Context menu</h3>
+              <p>
+                <code>data-contextmenu</code> opens an <code>.lg-menu</code> right where you clicked, kept on screen.
+                From the keyboard (menu key or Shift+F10) it focuses the first item.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage" style="--x: -20px; --y: -590px" data-snippet>
               <div class="lg-panel note" data-glass>
                 <small>CALIBRATION · NOW</small>
@@ -1093,6 +1126,10 @@
                   </td>
                 </tr>
                 <tr>
+                  <td>[data-contextmenu]</td>
+                  <td>Right-click or long-press inside opens the <code>.lg-menu</code> with that id at the pointer.</td>
+                </tr>
+                <tr>
                   <td>.lg-tip</td>
                   <td>
                     On a <code>popover="hint"</code> element, opened by <code>interestfor="id"</code> on its trigger.
@@ -1129,14 +1166,14 @@
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">24.8 KB</span> · <span data-size="gzip">8.4 KB</span> gzipped</small
+                >Minified · <span data-size="min">25.4 KB</span> · <span data-size="gzip">8.5 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">36.7 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">37.8 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">8.4 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">8.5 KB</span> gzipped.</span>
         </div>
       </section>
     </main>

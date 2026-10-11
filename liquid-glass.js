@@ -855,6 +855,26 @@ if (globalThis.document) {
     if (toggle) toggle.ariaPressed = toggle.ariaPressed !== 'true';
   });
 
+  // Context menus: right-click, long-press or the menu key inside [data-contextmenu="id"] opens that .lg-menu there.
+  document.addEventListener('contextmenu', e => {
+    const zone = e.target.closest?.('[data-contextmenu]'),
+      menu = zone && document.getElementById(zone.dataset.contextmenu);
+    if (!menu) return;
+    e.preventDefault();
+    const open = () => {
+      if (menu.matches(':popover-open')) menu.hidePopover();
+      Object.assign(menu.style, { positionArea: 'none', margin: '0' });
+      menu.showPopover();
+      // offset sizes ignore the opening scale; keep the menu on screen
+      menu.style.left = `${Math.max(8, Math.min(e.clientX, innerWidth - menu.offsetWidth - 8))}px`;
+      menu.style.top = `${Math.max(8, Math.min(e.clientY, innerHeight - menu.offsetHeight - 8))}px`;
+      if (e.button < 0) menu.querySelector('button, a')?.focus(); // button -1: opened from the keyboard
+    };
+    // Linux and touch fire contextmenu with the button still down; the release would light-dismiss the menu
+    if (e.buttons) addEventListener('pointerup', () => setTimeout(open), { once: true });
+    else open();
+  });
+
   // Tooltips: interestfor opens a popover="hint" on hover and focus natively; this mirrors it where unsupported.
   if (!('interestForElement' in HTMLButtonElement.prototype)) {
     let timer;
