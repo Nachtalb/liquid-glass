@@ -166,6 +166,10 @@
       }
       .topbar .lg-field {
         width: min(320px, 46vw);
+        min-width: 0; /* else the input's built-in width stops it shrinking */
+      }
+      .topbar > .lg-btn {
+        flex: none; /* on phones the field gives way, not the buttons */
       }
       .topbar .gh svg {
         width: 1.15em;
@@ -1812,7 +1816,6 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
           card.hidden = !!q && !card.querySelector('h3').textContent.toLowerCase().includes(q);
         if (q) $('#components').scrollIntoView({ behavior: 'smooth' });
       });
-
       const lens = $('#bench').lens; // the hero is an <lg-magnifier drag>
 
       // Toast card
