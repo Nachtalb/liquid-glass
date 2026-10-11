@@ -216,24 +216,17 @@
         justify-self: stretch;
         font-size: 13px;
       }
-      .lens {
-        position: absolute;
+      .bench .lg-lens {
         left: 43%;
         top: 112px;
         width: 176px;
         height: 176px;
-        border-radius: 50%;
-        cursor: grab;
-        touch-action: none;
         --lg-zoom: 1.6;
         --lg-bezel: 40;
         --lg-thickness: 70;
         --lg-specular: 0.8;
         background: rgb(255 255 255 / 0.04);
         box-shadow: 0 18px 40px rgb(0 0 0 / 0.35);
-      }
-      .lens:active {
-        cursor: grabbing;
       }
       .hint {
         position: absolute;
@@ -269,7 +262,7 @@
           grid-column: 1;
           grid-row: 4;
         }
-        .lens {
+        .bench .lg-lens {
           left: auto;
           right: 24px;
           top: 80px;
@@ -631,7 +624,7 @@
     </style>
   </head>
   <body>
-    <header class="bench stage" id="bench">
+    <lg-magnifier drag class="bench stage" id="bench" role="banner">
       <nav class="topbar" aria-label="Page">
         <span class="brand">liquid-glass.js</span>
         <label class="lg-field" data-glass>
@@ -690,9 +683,8 @@
         >
       </div>
 
-      <div class="lens" id="lens" data-glass aria-hidden="true"></div>
       <p class="hint" aria-hidden="true">Drag the lens</p>
-    </header>
+    </lg-magnifier>
 
     <main>
       <section class="sec" id="components">
@@ -1371,7 +1363,8 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
                 <tr>
                   <td>&lt;lg-magnifier&gt;</td>
                   <td>
-                    Wraps any content; a zoom lens follows the pointer and keyboard focus. Style
+                    Wraps any content; a zoom lens follows the pointer and keyboard focus. With <code>drag</code> the
+                    lens stays out and moves only when dragged, like the bench at the top. Style
                     <code>lg-magnifier .lg-lens</code> for its size and <code>--lg-zoom</code>.
                   </td>
                 </tr>
@@ -1450,14 +1443,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">36.2 KB</span> · <span data-size="gzip">11.2 KB</span> gzipped</small
+                >Minified · <span data-size="min">37.0 KB</span> · <span data-size="gzip">11.4 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">52.5 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">53.6 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">11.2 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">11.4 KB</span> gzipped.</span>
         </div>
       </section>
     </main>
@@ -1659,24 +1652,7 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
         if (q) $('#components').scrollIntoView({ behavior: 'smooth' });
       });
 
-      // Draggable lens
-      const lens = $('#lens');
-      lens.addEventListener('pointerdown', e => {
-        lens.setPointerCapture(e.pointerId);
-        const bench = $('#bench').getBoundingClientRect(),
-          r = lens.getBoundingClientRect(),
-          ox = e.clientX - r.left,
-          oy = e.clientY - r.top;
-        const move = ev => {
-          lens.style.left = Math.max(0, Math.min(bench.width - r.width, ev.clientX - bench.left - ox)) + 'px';
-          lens.style.top = Math.max(0, Math.min(bench.height - r.height, ev.clientY - bench.top - oy)) + 'px';
-          lens.style.right = 'auto';
-        };
-        lens.addEventListener('pointermove', move);
-        lens.addEventListener('lostpointercapture', () => lens.removeEventListener('pointermove', move), {
-          once: true,
-        });
-      });
+      const lens = $('#bench').lens; // the hero is an <lg-magnifier drag>
 
       // Toast card
       $('#toast-btn').addEventListener('click', () => toast('Lens 2 is back in spec · 0.04 λ RMS'));
