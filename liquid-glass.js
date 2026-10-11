@@ -74,7 +74,8 @@ const sdRect = (px, py, s) => {
 // RGBA map for a rounded rect: R = x and G = y displacement (128 = none), B = rim light, A = 255.
 // With shapes (rounded rects) it maps their smooth union instead, blended over `merge` px so close shapes
 // melt into one; A then holds the shape's coverage, which the filter uses to cut the glass out.
-// Plus a magnifier map if zoom ≠ 1. scale/zscale are the matching feDisplacementMap scales.
+// Plus a magnifier map if zoom ≠ 1, around each shape's own centre when there are shapes.
+// scale/zscale are the matching feDisplacementMap scales.
 // res < 1 renders the maps smaller; feImage stretches them back (the fields are smooth).
 export function computeMaps(
   w,
@@ -95,6 +96,8 @@ export function computeMaps(
   const lx = Math.cos((light * Math.PI) / 180),
     ly = Math.sin((light * Math.PI) / 180);
   const k = merge || 1e-6,
+    pad = k / 4 + 2, // the union reaches at most k/4 past a shape; 2px more for the antialiased edge
+    near = shapes?.map(s => [s.x - pad, s.y - pad, s.x + s.w + pad, s.y + s.h + pad]),
     sdf = (px, py) =>
       shapes.reduce((d, s) => {
         const b = sdRect(px, py, s),
@@ -106,14 +109,19 @@ export function computeMaps(
     for (let x = 0; x < W; x++) {
       const px = ((x + 0.5) * w) / W - w / 2,
         py = ((y + 0.5) * h) / H - h / 2; // feImage stretches W×H onto w×h
+      const i = (y * W + x) * 4;
       let e,
         nx = 0,
         ny = 0, // e: distance inside the edge, (nx, ny): outward edge normal
         a = 255;
       if (shapes) {
         const X = px + w / 2,
-          Y = py + h / 2,
-          d = sdf(X, Y),
+          Y = py + h / 2;
+        if (!near.some(([l, t, rr, b]) => X > l && X < rr && Y > t && Y < b)) {
+          dmap.set([128, 128, 0, 0], i); // far from every shape: outside the union, skip the work
+          continue;
+        }
+        const d = sdf(X, Y),
           gx = sdf(X + 0.5, Y) - d, // forward differences: the normal only steers the bend
           gy = sdf(X, Y + 0.5) - d,
           gl = Math.hypot(gx, gy) || 1;
@@ -150,7 +158,6 @@ export function computeMaps(
         dy = -ny * m;
         s = (nx * lx + ny * ly) ** 2 * Math.exp(-ee / Math.max(2, 1 / res)); // rim light, strongest facing the light axis
       }
-      const i = (y * W + x) * 4;
       dmap[i] = 128 + (dx / max) * 127;
       dmap[i + 1] = 128 + (dy / max) * 127;
       dmap[i + 2] = s * 255;
@@ -158,16 +165,35 @@ export function computeMaps(
     }
   // Magnifier: sample towards the centre. The field is linear and feImage upscaling interpolates it
   // exactly, so ≤32px is plenty. Per-axis range (not the diagonal) keeps the 8-bit steps finer.
+  // Shapes each magnify around their own centre, blended where they merge: linear inside each shape,
+  // so a quarter of the map's resolution still does.
   const z = 1 - 1 / zoom,
-    zmax = (Math.max(w, h) / 2) * Math.abs(z) || 1;
-  const ZW = z ? Math.min(32, W) : 0,
-    ZH = z ? Math.min(32, H) : 0,
+    zmax =
+      (shapes ? Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + pad : Math.max(w, h) / 2) * Math.abs(z) || 1;
+  const ZW = z ? (shapes ? Math.max(2, Math.ceil(W / 4)) : Math.min(32, W)) : 0,
+    ZH = z ? (shapes ? Math.max(2, Math.ceil(H / 4)) : Math.min(32, H)) : 0,
     zmap = z ? new Uint8ClampedArray(ZW * ZH * 4) : null;
   for (let y = 0; y < ZH; y++)
     for (let x = 0; x < ZW; x++) {
-      const i = (y * ZW + x) * 4;
-      zmap[i] = 128 - (((((x + 0.5) * w) / ZW - w / 2) * z) / zmax) * 127;
-      zmap[i + 1] = 128 - (((((y + 0.5) * h) / ZH - h / 2) * z) / zmax) * 127;
+      const i = (y * ZW + x) * 4,
+        X = ((x + 0.5) * w) / ZW,
+        Y = ((y + 0.5) * h) / ZH;
+      let cx = w / 2,
+        cy = h / 2;
+      if (shapes) {
+        let sum = 0;
+        cx = cy = 0;
+        for (const s of shapes) {
+          const q = Math.exp(-Math.max(0, sdRect(X, Y, s)) / pad); // 1 inside, fading with distance
+          sum += q;
+          cx += q * (s.x + s.w / 2);
+          cy += q * (s.y + s.h / 2);
+        }
+        cx /= sum;
+        cy /= sum;
+      }
+      zmap[i] = 128 - (((X - cx) * z) / zmax) * 127;
+      zmap[i + 1] = 128 - (((Y - cy) * z) / zmax) * 127;
       zmap[i + 2] = 128;
       zmap[i + 3] = 255;
     }
@@ -295,19 +321,30 @@ export function glass(el, opts = {}) {
       key = null;
     }
     // ~16 samples across the bezel is plenty. Shapes also carry the outline in the map, so at rest they render
-    // per device pixel to stay crisp; while they move (re-rendering every frame) half size, sharpened once still.
-    let res = Math.min(1, Math.max(0.5, 16 / o.bezel));
+    // per device pixel to stay crisp (within ~100k map pixels: feImage pixels are re-sent every frame); while they
+    // move (re-rendering every frame) half size, sharpened once still.
+    let res = Math.min(1, Math.max(0.5, 16 / o.bezel)),
+      [bx, by, bw, bh] = [0, 0, w, h];
     if (shapes) {
+      // only the shapes' bounding box costs anything: the pane (::before) shrinks to it. Moving the pane, not
+      // the map: Chromium misplaces a backdrop filter's feImage that doesn't start at 0, 0
+      const p = o.merge / 4 + 2;
+      bx = Math.max(0, Math.floor(Math.min(...shapes.map(s => s.x)) - p));
+      by = Math.max(0, Math.floor(Math.min(...shapes.map(s => s.y)) - p));
+      bw = Math.min(w, Math.ceil(Math.max(...shapes.map(s => s.x + s.w)) + p)) - bx;
+      bh = Math.min(h, Math.ceil(Math.max(...shapes.map(s => s.y + s.h)) + p)) - by;
+      if (bw <= 0 || bh <= 0) return;
       const g = shapes.flatMap(s => [s.x, s.y, s.w, s.h]).join(),
         moving = geo !== undefined && g !== geo;
       geo = g;
-      res = moving ? 0.5 : Math.min(2, devicePixelRatio || 1);
+      res = moving ? 0.5 : Math.min(2, devicePixelRatio || 1, Math.max(0.5, Math.sqrt(1e5 / (bw * bh))));
       clearTimeout(settle);
       if (moving) settle = setTimeout(render, 150);
     }
+    const rel = shapes?.map(s => ({ ...s, x: s.x - bx, y: s.y - by }));
     const k = [
-      w,
-      h,
+      bw,
+      bh,
       res,
       o.radius,
       o.bezel,
@@ -317,29 +354,30 @@ export function glass(el, opts = {}) {
       o.light,
       o.zoom,
       o.merge,
-      shapes?.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(Math.round)),
+      rel?.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(Math.round)),
     ].join();
     const m = mapsFor(k, () => {
-      const r = computeMaps(w, h, o, res, shapes);
+      const r = computeMaps(bw, bh, o, res, rel);
       return { d: toURL(r.dmap, r.W, r.H), z: r.zmap && toURL(r.zmap, r.ZW, r.ZH), scale: r.scale, zscale: r.zscale };
     });
-    if (k !== key) {
-      key = k;
-      for (const [img, url] of [
-        [fe.map, m.d],
-        [fe.zmap, m.z],
-      ]) {
-        if (!img) continue;
-        for (const [a, v] of [
-          ['x', 0],
-          ['y', 0],
-          ['width', w],
-          ['height', h],
-          ['href', url],
-        ])
-          img.setAttribute(a, v);
-      }
+    const fresh = k !== key;
+    key = k;
+    for (const [img, url] of [
+      [fe.map, m.d],
+      [fe.zmap, m.z],
+    ]) {
+      if (!img) continue;
+      for (const [a, v] of [
+        ['x', 0],
+        ['y', 0],
+        ['width', bw],
+        ['height', bh],
+      ])
+        img.setAttribute(a, v);
+      if (fresh) img.setAttribute('href', url);
     }
+    // set on every glass element, so a nested one doesn't inherit its ancestor's
+    el.style.setProperty('--lg-inset', `${by}px ${w - bx - bw}px ${h - by - bh}px ${bx}px`);
     fe.zoomed?.setAttribute('scale', m.zscale);
     // feDisplacementMap picks the nearest source pixel, so magnified content steps; a blur sized to the
     // magnification (in device px) smooths it like bilinear sampling would. Folded into the frost blur.
@@ -888,6 +926,7 @@ class LgMagnifier extends Base {
 
 // Merging glass: one pane cut to the smooth union of the children's boxes (border-radius kept), so children
 // closer than --lg-merge px melt together like liquid. Re-renders every frame while a child transitions.
+// With the drag attribute the children are moved by dragging, kept inside the element.
 class LgMerge extends Base {
   connectedCallback() {
     if (this.glass) return;
@@ -896,7 +935,8 @@ class LgMerge extends Base {
         const o = this.getBoundingClientRect();
         return Array.from(this.children, c => {
           const b = c.getBoundingClientRect(),
-            r = parseFloat(getComputedStyle(c).borderTopLeftRadius) || 0;
+            br = getComputedStyle(c).borderTopLeftRadius,
+            r = br.endsWith('%') ? (parseFloat(br) / 100) * Math.min(b.width, b.height) : parseFloat(br) || 0;
           return {
             x: b.left - o.left,
             y: b.top - o.top,
@@ -917,6 +957,27 @@ class LgMerge extends Base {
       this.addEventListener(type, () => (moving = Math.max(0, moving - 1)));
     const ro = new ResizeObserver(() => this.glass.update());
     for (const c of this.children) ro.observe(c);
+    if (!this.hasAttribute('drag')) return;
+    this.addEventListener('pointerdown', e => {
+      const c = [...this.children].find(c => c.contains(e.target));
+      if (e.button || !c) return;
+      c.setPointerCapture(e.pointerId);
+      const r = c.getBoundingClientRect(),
+        h = this.getBoundingClientRect(),
+        [x0, y0 = 0] = (c.style.translate || '0px').split(' ').map(parseFloat);
+      let raf = 0;
+      const move = ev => {
+        const dx = Math.max(h.left - r.left, Math.min(h.right - r.right, ev.clientX - e.clientX)),
+          dy = Math.max(h.top - r.top, Math.min(h.bottom - r.bottom, ev.clientY - e.clientY));
+        c.style.translate = `${x0 + dx}px ${y0 + dy}px`;
+        raf ||= requestAnimationFrame(() => {
+          raf = 0;
+          this.glass.update();
+        });
+      };
+      c.addEventListener('pointermove', move);
+      c.addEventListener('lostpointercapture', () => c.removeEventListener('pointermove', move), { once: true });
+    });
   }
 }
 
@@ -940,7 +1001,7 @@ ${Object.keys(DEFAULTS)
 }
 :where([data-glass]) { position: relative; isolation: isolate; background-color: var(--lg-tint); box-shadow: var(--lg-shadow); }
 [data-glass]::before {
-  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  content: ''; position: absolute; inset: var(--lg-inset, 0); z-index: -1; border-radius: inherit; pointer-events: none;
   backdrop-filter: var(--lg-filter);
 }
 
@@ -1126,6 +1187,9 @@ lg-merge {
   background: none; box-shadow: none; /* the glass is cut to the children's outline; a box fill would show the rectangle */
 }
 :where(lg-merge > *) { background-color: transparent; } /* plain buttons would bring the browser's grey */
+lg-merge[drag] { pointer-events: none; } /* an overlay: only the children catch the pointer */
+lg-merge[drag] > * { pointer-events: auto; cursor: grab; touch-action: none; user-select: none; }
+lg-merge[drag] > :active { cursor: grabbing; }
 .lg-navbar {
   /* slots: leading, title, trailing. Clear at the top of its scroller; as the large title scrolls under it, the glass,
      the small title and a blur behind and just below it fade in (scroll-driven, no script) */

@@ -46,4 +46,8 @@ assert(
 );
 assert(alpha(merged, 45, 20) === 255 && alpha(merged, 45, 2) === 0, 'merge bridges the gap at the waist only');
 
+const zm = computeMaps(90, 40, { ...o, zoom: 2 }, 1, blobs),
+  zr = x => zm.zmap[((10 >> 2) * zm.ZW + (x >> 2)) * 4];
+assert(zr(8) > 128 && zr(32) < 128 && zr(58) > 128 && zr(82) < 128, 'each shape magnifies around its own centre');
+
 console.log('ok, max displacement', scale.toFixed(1), 'px');
