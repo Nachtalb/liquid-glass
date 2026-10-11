@@ -674,7 +674,7 @@ class LgDots extends Base {
 }
 
 // Wheel picker over a native <select> child, which keeps forms, keyboard and screen readers working.
-// The rows scroll-snap and tilt on a drum (scroll-driven animation); the glass band magnifies the middle one.
+// The rows scroll-snap and tilt on a drum (scroll-driven animation); the glass band shows the middle one enlarged.
 class LgPicker extends Base {
   connectedCallback() {
     if (this.list) return;
@@ -686,16 +686,13 @@ class LgPicker extends Base {
     );
     list.children[select.selectedIndex]?.style.setProperty('scroll-initial-target', 'nearest'); // also right after display: none
     band.dataset.glass = '';
+    band.append(Object.assign(list.cloneNode(true), { className: 'lg-big' }));
+    this.style.setProperty('--lg-n', select.options.length);
     this.append(list, band);
     this.index = select.selectedIndex;
-    list.addEventListener('scrollend', () => {
-      const i = Math.round(list.scrollTop / list.firstChild.offsetHeight);
-      this.index = i;
-      if (i === select.selectedIndex) return;
-      select.selectedIndex = i;
-      for (const type of ['input', 'change']) select.dispatchEvent(new Event(type, { bubbles: true }));
-    });
-    select.addEventListener('change', () => this.go(select.selectedIndex)); // typeahead on the focused select
+    // each scrollTop set while dragging ends a scroll too, so the value waits for the throw to land
+    list.addEventListener('scrollend', () => this.hasAttribute('data-dragging') || this.sync());
+    select.addEventListener('change', e => e.isTrusted && this.go(select.selectedIndex)); // typeahead, not our own
     list.addEventListener('click', e => this.go([...list.children].indexOf(e.target)));
     this.addEventListener('keydown', e => {
       const d = { ArrowDown: 1, ArrowUp: -1 }[e.key];
@@ -729,7 +726,10 @@ class LgPicker extends Base {
         if (ev.timeStamp - last.timeStamp > 100) v = 0;
         const h = list.firstChild.offsetHeight,
           i = Math.max(0, Math.min(list.children.length - 1, Math.round((list.scrollTop - v * 250) / h))),
-          done = () => this.removeAttribute('data-dragging');
+          done = () => {
+            this.removeAttribute('data-dragging');
+            this.sync();
+          };
         if (Math.abs(list.scrollTop - i * h) < 1) done();
         else list.addEventListener('scrollend', done, { once: true });
         this.go(i);
@@ -742,6 +742,14 @@ class LgPicker extends Base {
       ])
         list.addEventListener(type, fn);
     });
+  }
+  // the row in the middle becomes the select's value
+  sync() {
+    const i = Math.round(this.list.scrollTop / this.list.firstChild.offsetHeight);
+    this.index = i;
+    if (i === this.select.selectedIndex) return;
+    this.select.selectedIndex = i;
+    for (const type of ['input', 'change']) this.select.dispatchEvent(new Event(type, { bubbles: true }));
   }
   go(i) {
     if (i < 0 || i >= this.list.children.length) return;
@@ -942,22 +950,29 @@ lg-dots {
 }
 lg-picker {
   position: relative; display: inline-block; vertical-align: middle; height: 10em; min-width: 5em; border-radius: 1.25em; user-select: none;
+  timeline-scope: --lg-wheel; /* lets the band's copy follow the rows' scroll */
   &:has(select:focus-visible) { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
   & select { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
-  /* spacers instead of padding, so the rows centre whatever box-sizing the page uses */
-  & .lg-rows { height: 100%; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; scroll-snap-type: y mandatory; }
-  & .lg-rows::before, & .lg-rows::after { content: ''; display: block; height: 4em; }
-  &[data-dragging] .lg-rows { scroll-snap-type: none; }
-  & .lg-rows > div {
-    height: 2em; line-height: 2em; padding-inline: 1em; text-align: center; white-space: nowrap; cursor: default; scroll-snap-align: center;
-    animation: lg-drum linear both; animation-timeline: view();
+  /* rows under the band are masked out; the band shows a copy at 1.2× in real text, which stays crisp where zooming the
+     backdrop would sample pixels. Spacers instead of padding, so rows centre whatever box-sizing the page uses */
+  & .lg-rows {
+    height: 100%; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; scroll-snap-type: y mandatory;
+    scroll-timeline: --lg-wheel y; mask: linear-gradient(#000 calc(50% - 1em), #0000 0 calc(50% + 1em), #000 0);
   }
+  & .lg-rows::before, & .lg-rows::after { content: ''; display: block; height: calc(50% - 1em); }
+  &[data-dragging] .lg-rows { scroll-snap-type: none; }
+  & :is(.lg-rows, .lg-big) > div { height: 2em; line-height: 2em; text-align: center; white-space: nowrap; }
+  & .lg-rows > div { padding-inline: 1em; cursor: default; scroll-snap-align: center; animation: lg-drum linear both; animation-timeline: view(); }
   & .lg-band {
-    --lg-zoom: 1.25; --lg-blur: 0; --lg-specular: .4; --lg-antialias: 0; /* at 1.25× the text reads sharper unsmoothed */
-    position: absolute; inset: calc(50% - 1em) .3em auto; height: 2em; border-radius: .6em; pointer-events: none;
+    --lg-blur: 0; --lg-specular: .4;
+    position: absolute; inset: calc(50% - 1em) .3em auto; height: 2em; border-radius: .6em; overflow: hidden; pointer-events: none;
     background: rgb(127 127 127 / .14); box-shadow: none;
   }
+  /* moves in step with the rows: scroll progress 0 → 1 lifts it by --lg-n − 1 rows; only the font is bigger */
+  & .lg-big { position: absolute; inset: 0 -.3em auto; animation: lg-wheel linear both; animation-timeline: --lg-wheel; }
+  & .lg-big > div { font-size: 1.2em; height: calc(2em / 1.2); line-height: calc(2em / 1.2); }
 }
+@keyframes lg-wheel { to { translate: 0 calc((1 - var(--lg-n)) * 2em); } }
 lg-dock {
   position: relative; display: inline-flex; align-items: center; gap: .4em; padding: .45em; border-radius: 1.5em; vertical-align: middle; touch-action: pan-y;
   & > :is(a, button) {
