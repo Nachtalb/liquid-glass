@@ -527,6 +527,57 @@ class LgSegmented extends Base {
   }
 }
 
+const ICON = d =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="${d}"/></svg>`;
+
+// − / + capsule over a hidden <input type="number">: it keeps forms, arrow keys and screen readers working.
+// Holding a half repeats the step.
+class LgStepper extends Base {
+  connectedCallback() {
+    if (this.input) return;
+    this.input = build(
+      this,
+      `<button type="button" tabindex="-1" aria-hidden="true" data-d="-1">${ICON('M5 12h14')}</button>` +
+        `<input type="number"><button type="button" tabindex="-1" aria-hidden="true" data-d="1">${ICON('M12 5v14M5 12h14')}</button>`,
+    );
+    this.input.addEventListener('input', () => this.sync());
+    this.addEventListener('pointerdown', e => {
+      const b = e.target.closest('button');
+      if (e.button || !b || b.disabled) return;
+      let t;
+      const repeat = first => {
+        if (this.step(+b.dataset.d)) t = setTimeout(repeat, first ? 400 : 80);
+      };
+      repeat(true);
+      addEventListener('pointerup', () => clearTimeout(t), { once: true });
+      addEventListener('pointercancel', () => clearTimeout(t), { once: true });
+    });
+    this.sync();
+  }
+  // returns whether the value changed (false at a limit, which also ends a hold)
+  step(d) {
+    const v = this.input.value;
+    if (d > 0) this.input.stepUp();
+    else this.input.stepDown();
+    if (this.input.value === v) return false;
+    for (const type of ['input', 'change']) this.input.dispatchEvent(new Event(type, { bubbles: true }));
+    return true;
+  }
+  sync() {
+    const { min, max, value } = this.input,
+      [down, up] = this.querySelectorAll('button');
+    down.disabled = min !== '' && +value <= +min;
+    up.disabled = max !== '' && +value >= +max;
+  }
+  get value() {
+    return this.input.value;
+  }
+  set value(v) {
+    this.input.value = v;
+    this.sync();
+  }
+}
+
 const CSS = `
 ${Object.keys(DEFAULTS)
   .map(k => `@property --lg-${k} { syntax: '*'; inherits: false; }`)
@@ -660,8 +711,21 @@ lg-segmented {
   &.lg-tabbar > :not(.lg-indicator) { flex-direction: column; gap: .15em; padding: .45em 1.2em; font-size: .72em; font-weight: 500; }
   &.lg-tabbar svg { width: 2em; height: 2em; }
 }
+lg-stepper {
+  position: relative; display: inline-flex; vertical-align: middle; height: 2.3em; border-radius: 999px; user-select: none;
+  &:has(input:focus-visible) { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
+  & input { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+  & button {
+    all: unset; position: relative; display: grid; place-items: center; width: 2.9em; border-radius: 999px; cursor: pointer;
+    transition: scale .5s var(--lg-spring), background-color .2s, opacity .2s;
+    &:active:not(:disabled) { scale: 1.15; background: rgb(127 127 127 / .2); }
+    &:disabled { opacity: .3; cursor: default; }
+    & svg { width: 1.15em; height: 1.15em; }
+  }
+  & button:last-of-type::before { content: ''; position: absolute; left: 0; top: 28%; bottom: 28%; width: 1px; background: currentColor; opacity: .2; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .lg-btn, .lg-menu, lg-switch, lg-switch *, lg-slider *, lg-segmented * { transition-duration: 0s !important; }
+  .lg-btn, .lg-menu, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper * { transition-duration: 0s !important; }
 }
 }`;
 
@@ -672,6 +736,7 @@ if (globalThis.document) {
   customElements.define('lg-switch', LgSwitch);
   customElements.define('lg-slider', LgSlider);
   customElements.define('lg-segmented', LgSegmented);
+  customElements.define('lg-stepper', LgStepper);
 
   const scan = (node, fn) => {
     if (node.nodeType !== 1) return;

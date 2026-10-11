@@ -658,6 +658,23 @@
           </article>
 
           <article class="card">
+            <div class="stage" style="--x: -60px; --y: -600px" data-snippet>
+              <label class="opt">
+                Guests <output id="guests">2</output>
+                <lg-stepper data-glass name="guests" min="1" max="12" value="2" aria-label="Guests"></lg-stepper>
+              </label>
+            </div>
+            <div class="meta">
+              <h3>Stepper</h3>
+              <p>
+                Tap or hold either half. Wraps <code>&lt;input type="number"&gt;</code>, so arrow keys and forms work
+                and each half greys out at its limit.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage" style="--x: -150px; --y: -600px" data-snippet>
               <lg-segmented data-glass>
                 <button>Day</button><button>Week</button><button>Month</button><button>Year</button>
@@ -923,6 +940,14 @@
                   </td>
                 </tr>
                 <tr>
+                  <td>&lt;lg-stepper&gt;</td>
+                  <td>
+                    <code>min</code>, <code>max</code>, <code>step</code>, <code>value</code>, <code>name</code> pass
+                    through to a hidden <code>&lt;input type="number"&gt;</code>. Hold to repeat. Property
+                    <code>.value</code>.
+                  </td>
+                </tr>
+                <tr>
                   <td>&lt;lg-segmented&gt;</td>
                   <td>
                     Children are the segments. <code>.value</code> = selected index, fires <code>change</code>. Add
@@ -963,14 +988,14 @@
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">18.7 KB</span> · <span data-size="gzip">6.9 KB</span> gzipped</small
+                >Minified · <span data-size="min">20.7 KB</span> · <span data-size="gzip">7.4 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">28.6 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">31.4 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">6.9 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">7.4 KB</span> gzipped.</span>
         </div>
       </section>
     </main>
@@ -1187,6 +1212,9 @@
           once: true,
         });
       });
+
+      // Stepper card shows its value
+      $('lg-stepper[name=guests]').addEventListener('input', e => ($('#guests').value = e.target.value));
 
       // Bench controls
       const allGlass = () => document.querySelectorAll('[data-glass]');
