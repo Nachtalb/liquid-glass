@@ -652,6 +652,62 @@
           </article>
 
           <article class="card">
+            <div class="stage" style="--x: -880px; --y: -170px" data-snippet>
+              <div class="lg-toolbar" data-glass role="toolbar" aria-label="Text formatting">
+                <button aria-label="Bold" aria-pressed="true"><b>B</b></button>
+                <button aria-label="Italic" aria-pressed="false"><i>I</i></button>
+                <button aria-label="Underline" aria-pressed="false"><u>U</u></button>
+                <hr />
+                <button aria-label="Align left">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 6h16M4 12h10M4 18h14" />
+                  </svg>
+                </button>
+                <button aria-label="Align centre">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 6h16M7 12h10M5 18h14" />
+                  </svg>
+                </button>
+                <hr />
+                <button aria-label="Share">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M12 15V4M8 8l4-4 4 4M6 12v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="meta">
+              <h3>Toolbar</h3>
+              <p>
+                One glass capsule for a row of icon buttons. <code>&lt;hr&gt;</code> divides groups, and buttons with
+                <code>aria-pressed</code> toggle when tapped.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage paper" style="--x: -40px; --y: -40px" data-snippet>
               <div class="stack">
                 <label class="opt"><lg-switch name="wifi" checked></lg-switch> Wi-Fi</label>
@@ -1011,6 +1067,13 @@
                   <td>Variants <code>.lg-round</code> and <code>.lg-tinted</code></td>
                 </tr>
                 <tr>
+                  <td>.lg-toolbar</td>
+                  <td>
+                    Icon buttons sharing one capsule; add <code>role="toolbar"</code> and an <code>aria-label</code>.
+                    <code>&lt;hr&gt;</code> divides groups; <code>aria-pressed</code> buttons toggle.
+                  </td>
+                </tr>
+                <tr>
                   <td>.lg-field · .lg-panel · .lg-menu</td>
                   <td>Search field, container, popover menu</td>
                 </tr>
@@ -1040,14 +1103,14 @@
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">22.9 KB</span> · <span data-size="gzip">7.9 KB</span> gzipped</small
+                >Minified · <span data-size="min">23.7 KB</span> · <span data-size="gzip">8.1 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">34.2 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">35.1 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">7.9 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">8.1 KB</span> gzipped.</span>
         </div>
       </section>
     </main>

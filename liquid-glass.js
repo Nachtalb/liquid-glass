@@ -791,8 +791,21 @@ lg-dots {
     &:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: -2px; }
   }
 }
+.lg-toolbar {
+  display: inline-flex; align-items: center; gap: .15em; padding: .3em; border-radius: 999px; vertical-align: middle;
+  & > :is(button, a) {
+    all: unset; display: grid; place-items: center; width: 2.4em; height: 2.4em; border-radius: 999px; cursor: pointer;
+    transition: scale .5s var(--lg-spring), background-color .2s, color .2s;
+    &:hover { background: rgb(127 127 127 / .15); }
+    &:active { scale: 1.15; background: rgb(127 127 127 / .25); }
+    &:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: -2px; }
+    &[aria-pressed=true] { color: var(--lg-accent); }
+  }
+  & svg { width: 1.25em; height: 1.25em; }
+  & > hr { all: unset; align-self: stretch; width: 1px; margin: .45em .2em; background: currentColor; opacity: .2; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .lg-btn, .lg-menu, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
+  .lg-btn, .lg-menu, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
 }
 }`;
 
@@ -827,5 +840,9 @@ if (globalThis.document) {
     attributeFilter: ['data-glass'],
   });
   scan(document.documentElement, el => glass(el));
-  document.addEventListener('click', e => e.target.closest?.('.lg-menu > :is(button, a)')?.parentElement.hidePopover());
+  document.addEventListener('click', e => {
+    e.target.closest?.('.lg-menu > :is(button, a)')?.parentElement.hidePopover();
+    const toggle = e.target.closest?.('.lg-toolbar > [aria-pressed]');
+    if (toggle) toggle.ariaPressed = toggle.ariaPressed !== 'true';
+  });
 }
