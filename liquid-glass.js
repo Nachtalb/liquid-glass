@@ -322,6 +322,7 @@ export function glass(el, opts = {}) {
   let key,
     zoomed,
     geo,
+    changed = 0,
     settle,
     shown = true;
   const show = () => el.style.setProperty('--lg-filter', shown ? `url(#${filter.id})` : 'none');
@@ -364,11 +365,14 @@ export function glass(el, opts = {}) {
     if (shapes) {
       // Shapes carry the outline in the map, so at rest they render per device pixel to stay crisp; while they
       // change shape (re-rendering every frame) coarser, sharpened once still. Fixed levels, so it never drifts.
+      // "moving" until the shape has held still for 150ms: a second render of the same frame (resize observer)
+      // must not count as still, or every other frame renders at full resolution
       const g = JSON.stringify([w, h, shapes]),
-        moving = geo !== undefined && g !== geo;
-      geo = g;
+        now = performance.now();
+      if (g !== geo) [geo, changed] = [g, now];
+      const moving = now - changed < 150;
       clearTimeout(settle);
-      if (moving) settle = setTimeout(render, 150);
+      if (moving) settle = setTimeout(render, 160 - (now - changed));
       // pixel budgets: ~25k a frame while changing, ~100k once still (feImage pixels are re-sent every frame)
       const res = moving
           ? (MOVING.find(l => l * l * w * h <= 2.5e4) ?? 1 / 8)
