@@ -498,6 +498,33 @@
           --tile: #5e5ce6;
         }
       }
+      .phone {
+        width: min(100%, 300px);
+        height: 100%;
+        overflow: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: none;
+        border-radius: 22px;
+        background: #131518;
+      }
+      .patches {
+        list-style: none;
+        margin: 0;
+        padding: 0 0.75em 0.75em;
+        & li {
+          display: flex;
+          align-items: center;
+          gap: 0.75em;
+          padding: 0.45em 0;
+          &::before {
+            content: '';
+            width: 2.2em;
+            height: 2.2em;
+            border-radius: 0.5em;
+            background: var(--c);
+          }
+        }
+      }
       .fine-print {
         margin: 0;
         font: 11px var(--mono);
@@ -1016,6 +1043,39 @@
           </article>
 
           <article class="card">
+            <div class="stage" style="--x: -940px; --y: -120px" data-snippet>
+              <div class="phone">
+                <nav class="lg-navbar" data-glass>
+                  <button>‹ Charts</button>
+                  <strong aria-hidden="true">ColorChecker</strong>
+                  <button>Edit</button>
+                </nav>
+                <h2 class="lg-large-title">ColorChecker</h2>
+                <ul class="patches">
+                  <li style="--c: #735244">Dark skin</li>
+                  <li style="--c: #c29682">Light skin</li>
+                  <li style="--c: #627a9d">Blue sky</li>
+                  <li style="--c: #576c43">Foliage</li>
+                  <li style="--c: #8580b1">Blue flower</li>
+                  <li style="--c: #67bdaa">Bluish green</li>
+                  <li style="--c: #d67e2c">Orange</li>
+                  <li style="--c: #505ba6">Purplish blue</li>
+                  <li style="--c: #c15a63">Moderate red</li>
+                  <li style="--c: #5e3c6c">Purple</li>
+                </ul>
+              </div>
+            </div>
+            <div class="meta">
+              <h3>Collapsing nav bar</h3>
+              <p>
+                Scroll the list: the large title recedes, and the bar turns to glass with a soft blur along its edge.
+                Pure CSS with scroll-driven animations; it follows its nearest scroller, or the page.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage" style="--x: -120px; --y: -610px" data-snippet>
               <label class="lg-field" data-glass style="width: min(100%, 300px)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -1361,6 +1421,13 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
                   </td>
                 </tr>
                 <tr>
+                  <td>.lg-navbar · .lg-large-title</td>
+                  <td>
+                    Sticky bar with three slots (leading, title, trailing), then a large title. Scrolling turns the bar
+                    to glass and swaps the titles; no script. Follows its nearest scroller.
+                  </td>
+                </tr>
+                <tr>
                   <td>&lt;lg-magnifier&gt;</td>
                   <td>
                     Wraps any content; a zoom lens follows the pointer and keyboard focus. With <code>drag</code> the
@@ -1443,14 +1510,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">37.0 KB</span> · <span data-size="gzip">11.4 KB</span> gzipped</small
+                >Minified · <span data-size="min">38.6 KB</span> · <span data-size="gzip">11.8 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">53.6 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">55.2 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">11.4 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">11.8 KB</span> gzipped.</span>
         </div>
       </section>
     </main>
