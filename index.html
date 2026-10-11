@@ -841,6 +841,40 @@
           </article>
 
           <article class="card">
+            <div class="stage paper" style="--x: -200px; --y: -60px" data-snippet>
+              <lg-picker data-glass>
+                <select name="shutter" aria-label="Shutter speed">
+                  <option>1/1000</option>
+                  <option>1/500</option>
+                  <option>1/250</option>
+                  <option selected>1/125</option>
+                  <option>1/60</option>
+                  <option>1/30</option>
+                  <option>1/15</option>
+                </select>
+              </lg-picker>
+              <lg-picker data-glass>
+                <select name="iso" aria-label="ISO">
+                  <option>100</option>
+                  <option selected>200</option>
+                  <option>400</option>
+                  <option>800</option>
+                  <option>1600</option>
+                  <option>3200</option>
+                </select>
+              </lg-picker>
+            </div>
+            <div class="meta">
+              <h3>Wheel picker</h3>
+              <p>
+                Scroll, swipe, drag or use the arrow keys; the glass band magnifies the row it holds. Wraps a native
+                <code>&lt;select&gt;</code>, so forms and screen readers see a plain select.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage" style="--x: -150px; --y: -600px" data-snippet>
               <lg-segmented data-glass>
                 <button>Day</button><button>Week</button><button>Month</button><button>Year</button>
@@ -1230,6 +1264,13 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
                   </td>
                 </tr>
                 <tr>
+                  <td>&lt;lg-picker&gt;</td>
+                  <td>
+                    Wraps a <code>&lt;select&gt;</code>; its options are the rows. <code>.value</code> = selected value,
+                    the select fires <code>change</code> once the wheel settles.
+                  </td>
+                </tr>
+                <tr>
                   <td>.lg-btn</td>
                   <td>Variants <code>.lg-round</code> and <code>.lg-tinted</code></td>
                 </tr>
@@ -1304,14 +1345,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">30.4 KB</span> · <span data-size="gzip">9.8 KB</span> gzipped</small
+                >Minified · <span data-size="min">34.0 KB</span> · <span data-size="gzip">10.6 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">44.7 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">49.7 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">9.8 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">10.6 KB</span> gzipped.</span>
         </div>
       </section>
     </main>

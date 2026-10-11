@@ -673,6 +673,90 @@ class LgDots extends Base {
   }
 }
 
+// Wheel picker over a native <select> child, which keeps forms, keyboard and screen readers working.
+// The rows scroll-snap and tilt on a drum (scroll-driven animation); the glass band magnifies the middle one.
+class LgPicker extends Base {
+  connectedCallback() {
+    if (this.list) return;
+    const select = (this.select = this.querySelector('select')),
+      list = (this.list = Object.assign(document.createElement('div'), { className: 'lg-rows', ariaHidden: 'true' })),
+      band = Object.assign(document.createElement('div'), { className: 'lg-band' });
+    list.append(
+      ...Array.from(select.options, o => Object.assign(document.createElement('div'), { textContent: o.text })),
+    );
+    list.children[select.selectedIndex]?.style.setProperty('scroll-initial-target', 'nearest'); // also right after display: none
+    band.dataset.glass = '';
+    this.append(list, band);
+    this.index = select.selectedIndex;
+    list.addEventListener('scrollend', () => {
+      const i = Math.round(list.scrollTop / list.firstChild.offsetHeight);
+      this.index = i;
+      if (i === select.selectedIndex) return;
+      select.selectedIndex = i;
+      for (const type of ['input', 'change']) select.dispatchEvent(new Event(type, { bubbles: true }));
+    });
+    select.addEventListener('change', () => this.go(select.selectedIndex)); // typeahead on the focused select
+    list.addEventListener('click', e => this.go([...list.children].indexOf(e.target)));
+    this.addEventListener('keydown', e => {
+      const d = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+      if (!d) return;
+      e.preventDefault();
+      this.go(this.index + d);
+    });
+    // Mouse drag spins the wheel (touch and wheel scroll natively). Snapping is off until the throw lands.
+    list.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'mouse' || e.button) return;
+      const top0 = list.scrollTop;
+      let dragged = false,
+        v = 0,
+        last = e;
+      const move = ev => {
+        if (!(dragged ||= Math.abs(ev.clientY - e.clientY) > 4)) return;
+        this.toggleAttribute('data-dragging', true);
+        list.scrollTop = top0 - (ev.clientY - e.clientY);
+        v = (ev.clientY - last.clientY) / Math.max(1, ev.timeStamp - last.timeStamp);
+        last = ev;
+      };
+      const up = ev => {
+        for (const [type, fn] of [
+          ['pointermove', move],
+          ['pointerup', up],
+          ['pointercancel', up],
+        ])
+          list.removeEventListener(type, fn);
+        if (!dragged) return;
+        swallowClick(list);
+        if (ev.timeStamp - last.timeStamp > 100) v = 0;
+        const h = list.firstChild.offsetHeight,
+          i = Math.max(0, Math.min(list.children.length - 1, Math.round((list.scrollTop - v * 250) / h))),
+          done = () => this.removeAttribute('data-dragging');
+        if (Math.abs(list.scrollTop - i * h) < 1) done();
+        else list.addEventListener('scrollend', done, { once: true });
+        this.go(i);
+      };
+      e.target.setPointerCapture(e.pointerId); // on the row, so a plain click still lands on it
+      for (const [type, fn] of [
+        ['pointermove', move],
+        ['pointerup', up],
+        ['pointercancel', up],
+      ])
+        list.addEventListener(type, fn);
+    });
+  }
+  go(i) {
+    if (i < 0 || i >= this.list.children.length) return;
+    this.index = i;
+    this.list.scrollTo({ top: i * this.list.firstChild.offsetHeight, behavior: 'smooth' });
+  }
+  get value() {
+    return this.select.value;
+  }
+  set value(v) {
+    this.select.value = v;
+    this.go(this.select.selectedIndex);
+  }
+}
+
 const CSS = `
 ${Object.keys(DEFAULTS)
   .map(k => `@property --lg-${k} { syntax: '*'; inherits: false; }`)
@@ -830,6 +914,29 @@ lg-dots {
     &:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: -2px; }
   }
 }
+lg-picker {
+  position: relative; display: inline-block; vertical-align: middle; height: 10em; min-width: 5em; border-radius: 1.25em; user-select: none;
+  &:has(select:focus-visible) { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
+  & select { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+  /* spacers instead of padding, so the rows centre whatever box-sizing the page uses */
+  & .lg-rows { height: 100%; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; scroll-snap-type: y mandatory; }
+  & .lg-rows::before, & .lg-rows::after { content: ''; display: block; height: 4em; }
+  &[data-dragging] .lg-rows { scroll-snap-type: none; }
+  & .lg-rows > div {
+    height: 2em; line-height: 2em; padding-inline: 1em; text-align: center; white-space: nowrap; cursor: default; scroll-snap-align: center;
+    animation: lg-drum linear both; animation-timeline: view();
+  }
+  & .lg-band {
+    --lg-zoom: 1.25; --lg-blur: 0; --lg-specular: .4; --lg-antialias: 0; /* at 1.25× the text reads sharper unsmoothed */
+    position: absolute; inset: calc(50% - 1em) .3em auto; height: 2em; border-radius: .6em; pointer-events: none;
+    background: rgb(127 127 127 / .14); box-shadow: none;
+  }
+}
+@keyframes lg-drum { /* view() runs 0 → 1 as a row crosses from the bottom edge to the top one */
+  from { transform: perspective(20em) rotateX(-75deg); opacity: .2; }
+  50% { transform: perspective(20em) rotateX(0deg); opacity: 1; }
+  to { transform: perspective(20em) rotateX(75deg); opacity: .2; }
+}
 .lg-toolbar {
   display: inline-flex; align-items: center; gap: .15em; padding: .3em; border-radius: 999px; vertical-align: middle;
   & > :is(button, a) {
@@ -906,6 +1013,7 @@ if (globalThis.document) {
   customElements.define('lg-segmented', LgSegmented);
   customElements.define('lg-stepper', LgStepper);
   customElements.define('lg-dots', LgDots);
+  customElements.define('lg-picker', LgPicker);
 
   const scan = (node, fn) => {
     if (node.nodeType !== 1) return;
