@@ -77,22 +77,24 @@ const sdRect = (px, py, s) => {
 // Plus a magnifier map if zoom ≠ 1, around each shape's own centre when there are shapes.
 // scale/zscale are the matching feDisplacementMap scales.
 // res < 1 renders the maps smaller; feImage stretches them back (the fields are smooth).
-export function computeMaps(
-  w,
-  h,
-  { radius: r, bezel, thickness, profile, ior, light, zoom, merge = 0 },
-  res = 1,
-  shapes,
-) {
-  const W = Math.ceil(w * res),
-    H = Math.ceil(h * res),
-    n = 128;
-  const disp = bezelDisplacement(profiles[profile] ?? profiles.squircle, bezel, thickness, ior, n);
+let lens; // the last profile: moving shapes re-render with the same one every frame
+function lensProfile({ bezel, thickness, profile, ior }) {
+  const k = [bezel, thickness, profile, ior].join();
+  if (lens?.k === k) return lens;
+  const disp = bezelDisplacement(profiles[profile] ?? profiles.squircle, bezel, thickness, ior, 128);
   // Physics says 0 right at the rim, then a near-vertical climb to the peak: hold the peak out to the rim
   // instead, or that cliff aliases into a sawtooth edge.
   const peak = disp.reduce((p, v, i) => (Math.abs(v) > Math.abs(disp[p]) ? i : p), 0);
   disp.fill(disp[peak], 0, peak);
-  const max = Math.abs(disp[peak]) || 1;
+  return (lens = { k, disp, max: Math.abs(disp[peak]) || 1 });
+}
+
+export function computeMaps(w, h, o, res = 1, shapes) {
+  const { radius: r, bezel, light, zoom, merge = 0 } = o,
+    W = Math.ceil(w * res),
+    H = Math.ceil(h * res),
+    n = 128,
+    { disp, max } = lensProfile(o);
   const lx = Math.cos((light * Math.PI) / 180),
     ly = Math.sin((light * Math.PI) / 180);
   const k = merge || 1e-6,
@@ -282,6 +284,141 @@ function toURL(data, W, H) {
 // fixed resolution levels for shaped glass: steps that never drift between frames
 const LEVELS = [2, 1, 1 / 2];
 
+// WebGL2 renders shaped maps (smooth union, refraction, rim light, per-shape zoom) in a shader: the same maths as
+// computeMaps, which stays for tests and as the fallback. Only the PNG hand-over is left on the CPU.
+const FRAG = `#version 300 es
+precision highp float;
+uniform vec2 size, grid, at, light; // at: this map's corner in the canvas
+uniform int n, mode;
+uniform vec4 box[8], lut[32]; // shapes as centre + half size; the bezel profile, 128 steps
+uniform float rad[8], k, pad, reach, bezel, peak, falloff, z, zmax;
+out vec4 o;
+float sd(int i, vec2 p, out vec2 g) { // rounded-rect distance and its gradient
+  vec2 off = p - box[i].xy, q = abs(off) - box[i].zw + rad[i];
+  float d;
+  if (q.x > 0. && q.y > 0.) { float l = length(q); d = l - rad[i]; g = q / l; }
+  else if (q.x > q.y) { d = q.x - rad[i]; g = vec2(1, 0); }
+  else { d = q.y - rad[i]; g = vec2(0, 1); }
+  g *= vec2(off.x < 0. ? -1. : 1., off.y < 0. ? -1. : 1.);
+  return d;
+}
+void main() {
+  vec2 p = (gl_FragCoord.xy - at) * size / grid, g; // readPixels rows run bottom-up, so map row 0 is GL row 0
+  if (mode == 1) { // zoom: towards each shape's own centre, blended where they merge
+    vec2 c = vec2(0);
+    float sum = 0.;
+    for (int i = 0; i < n; i++) { float q = exp(-max(0., sd(i, p, g)) / pad); sum += q; c += q * box[i].xy; }
+    o = vec4((128. - (p - c / sum) * z / zmax * 127.) / 255., 128. / 255., 1);
+    return;
+  }
+  float d = 0.;
+  vec2 gd = vec2(0);
+  bool any = false;
+  for (int i = 0; i < n; i++) {
+    vec2 a = abs(p - box[i].xy);
+    if (a.x > box[i].z + reach || a.y > box[i].w + reach) continue;
+    float b = sd(i, p, g);
+    if (!any) { d = b; gd = g; any = true; continue; }
+    float t = clamp(.5 + .5 * (b - d) / k, 0., 1.); // polynomial smooth min, gradient blended alike
+    d = b + (d - b) * t - k * t * (1. - t);
+    gd = g + (gd - g) * t;
+  }
+  if (!any || d > pad) { o = vec4(0); return; }
+  float l = length(gd), e = -d, s = 0.;
+  vec2 nrm = l > 0. ? gd / l : gd, dv = vec2(0);
+  if (e < bezel) {
+    float ee = max(e, 0.);
+    int i = min(127, int(ee / bezel * 128.));
+    dv = -nrm * lut[i >> 2][i & 3];
+    s = pow(dot(nrm, light), 2.) * exp(-ee / falloff);
+  }
+  o = vec4((128. + dv / peak * 127.) / 255., s, clamp(.5 - d * grid.x / size.x, 0., 1.));
+}`;
+let gl, prog, U;
+function glMaps(w, h, o, res, shapes) {
+  if (gl === undefined) {
+    const c = document.createElement('canvas');
+    gl = c.getContext('webgl2', { antialias: false });
+    if (gl) {
+      prog = gl.createProgram();
+      for (const [type, src] of [
+        [
+          gl.VERTEX_SHADER,
+          '#version 300 es\nvoid main(){gl_Position=vec4(vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.,0,1);}',
+        ],
+        [gl.FRAGMENT_SHADER, FRAG],
+      ]) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        gl.attachShader(prog, s);
+      }
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) gl = null;
+      else {
+        gl.useProgram(prog);
+        gl.disable(gl.DITHER); // exact values, they're data
+        U = new Proxy({}, { get: (m, k) => (m[k] ??= gl.getUniformLocation(prog, k)) });
+      }
+    }
+  }
+  if (!gl || gl.isContextLost() || shapes.length > 8) return null;
+  const { disp, max } = lensProfile(o),
+    k = o.merge || 1e-6,
+    pad = k / 4 + 2,
+    z = 1 - 1 / o.zoom,
+    zmax = (Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + pad) * Math.abs(z) || 1,
+    box = new Float32Array(32);
+  shapes.forEach((s, i) => box.set([s.x + s.w / 2, s.y + s.h / 2, s.w / 2, s.h / 2], i * 4));
+  gl.uniform2f(U.size, w, h);
+  gl.uniform2f(U.light, Math.cos((o.light * Math.PI) / 180), Math.sin((o.light * Math.PI) / 180));
+  gl.uniform1i(U.n, shapes.length);
+  gl.uniform4fv(U.box, box);
+  gl.uniform1fv(
+    U.rad,
+    Float32Array.from({ length: 8 }, (_, i) => shapes[i]?.r ?? 0),
+  );
+  gl.uniform4fv(U.lut, Float32Array.from(disp));
+  gl.uniform1f(U.k, k);
+  gl.uniform1f(U.pad, pad);
+  gl.uniform1f(U.reach, k * 1.25 + 2);
+  gl.uniform1f(U.bezel, o.bezel);
+  gl.uniform1f(U.peak, max);
+  gl.uniform1f(U.falloff, Math.max(2, 1 / res));
+  gl.uniform1f(U.z, z);
+  gl.uniform1f(U.zmax, zmax);
+  // Both maps in one canvas (grown, never shrunk) and one readback: each readPixels waits for the GPU.
+  // The PNGs come from the CPU canvas, like computeMaps' do.
+  const W = Math.ceil(w * res),
+    H = Math.ceil(h * res),
+    ZW = z ? Math.max(2, Math.ceil(W / 4)) : 0,
+    ZH = z ? Math.max(2, Math.ceil(H / 4)) : 0,
+    c = gl.canvas,
+    px = new Uint8ClampedArray(W * (H + ZH) * 4);
+  if (c.width < W || c.height < H + ZH)
+    Object.assign(c, { width: Math.max(c.width, W), height: Math.max(c.height, H + ZH) });
+  for (const [mode, y, mw, mh] of [
+    [0, 0, W, H],
+    [1, H, ZW, ZH],
+  ]) {
+    if (!mw) continue;
+    gl.viewport(0, y, mw, mh);
+    gl.uniform2f(U.grid, mw, mh);
+    gl.uniform2f(U.at, 0, y);
+    gl.uniform1i(U.mode, mode);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  gl.readPixels(0, 0, W, H + ZH, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  const zmap = z && new Uint8ClampedArray(ZW * ZH * 4);
+  for (let y = 0; y < ZH; y++) zmap.set(px.subarray((H + y) * W * 4, ((H + y) * W + ZW) * 4), y * ZW * 4);
+  return {
+    d: toURL(px.subarray(0, W * H * 4), W, H),
+    z: z ? toURL(zmap, ZW, ZH) : undefined,
+    scale: 2 * max,
+    zscale: z ? 2 * zmax : 0,
+  };
+}
+
 function readOpts(el, opts) {
   const cs = getComputedStyle(el),
     o = {};
@@ -366,6 +503,8 @@ export function glass(el, opts = {}) {
       m = {
         key: k,
         ...mapsFor(k, () => {
+          const g = glMaps(w, h, o, res, shapes);
+          if (g) return g;
           const r = computeMaps(w, h, o, res, shapes);
           return {
             d: toURL(r.dmap, r.W, r.H),
