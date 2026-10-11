@@ -879,7 +879,6 @@ class LgPicker extends Base {
 }
 
 // Magnifier: a zoom lens follows the pointer, or keyboard focus, over whatever it wraps.
-// With the drag attribute the lens stays out and moves only when dragged, kept inside the element.
 class LgMagnifier extends Base {
   connectedCallback() {
     if (this.lens) return;
@@ -887,26 +886,6 @@ class LgMagnifier extends Base {
       wobble = jelly(lens);
     lens.dataset.glass = '';
     this.append(lens);
-    if (this.hasAttribute('drag')) {
-      lens.addEventListener('pointerdown', e => {
-        if (e.button) return;
-        lens.setPointerCapture(e.pointerId);
-        const r = lens.getBoundingClientRect(),
-          h = this.getBoundingClientRect(),
-          [x0, y0 = 0] = (lens.style.translate || '0px').split(' ').map(parseFloat);
-        const move = ev => {
-          const dx = Math.max(h.left - r.left, Math.min(h.right - r.right, ev.clientX - e.clientX)),
-            dy = Math.max(h.top - r.top, Math.min(h.bottom - r.bottom, ev.clientY - e.clientY));
-          lens.style.translate = `${x0 + dx}px ${y0 + dy}px`;
-          wobble(ev.clientX);
-        };
-        lens.addEventListener('pointermove', move);
-        lens.addEventListener('lostpointercapture', () => lens.removeEventListener('pointermove', move), {
-          once: true,
-        });
-      });
-      return;
-    }
     const at = (x, y) => {
       const r = this.getBoundingClientRect();
       lens.style.translate = `${x - r.left - lens.offsetWidth / 2}px ${y - r.top - lens.offsetHeight / 2}px`;
@@ -1172,15 +1151,13 @@ lg-picker {
 @keyframes lg-wheel { to { translate: 0 calc((1 - var(--lg-n)) * 2em); } }
 lg-magnifier {
   position: relative; display: inline-block; vertical-align: middle;
-  &:not([drag]) { touch-action: pan-y; }
+  touch-action: pan-y;
   & .lg-lens {
     --lg-zoom: 1.4; --lg-bezel: 12; --lg-blur: 0; /* narrow bezel: a flat magnifier, so the content stays undistorted */
     position: absolute; top: 0; left: 0; width: 5em; height: 5em; border-radius: 50%; z-index: 1; pointer-events: none;
     background: rgb(255 255 255 / .04); scale: 0; transition: scale .2s ease-in;
   }
   &[data-lens] .lg-lens { scale: 1; transition: scale .5s var(--lg-spring); }
-  &[drag] .lg-lens { scale: 1; pointer-events: auto; cursor: grab; touch-action: none; }
-  &[drag] .lg-lens:active { cursor: grabbing; }
 }
 lg-merge {
   display: inline-flex; align-items: center; gap: .75em; vertical-align: middle;
