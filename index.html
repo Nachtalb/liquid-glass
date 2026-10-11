@@ -441,6 +441,30 @@
         }
       }
 
+      /* page dots demo: a scroll-snap carousel of chart crops */
+      .card .pager {
+        padding: 0;
+        display: block;
+      }
+      .slides {
+        display: flex;
+        height: 100%;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+      }
+      .slides > div {
+        flex: 0 0 100%;
+        scroll-snap-align: start;
+        background: #16181b var(--chart-dark) var(--x) var(--y) / 1280px 820px no-repeat;
+      }
+      .pager lg-dots {
+        position: absolute;
+        bottom: 14px;
+        left: 50%;
+        translate: -50% 0;
+      }
+
       /* download */
       .get {
         display: flex;
@@ -669,6 +693,27 @@
               <p>
                 Tap or hold either half. Wraps <code>&lt;input type="number"&gt;</code>, so arrow keys and forms work
                 and each half greys out at its limit.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="stage pager" data-snippet>
+              <div class="slides" id="slides">
+                <div style="--x: -540px; --y: -90px"></div>
+                <div style="--x: -900px; --y: -100px"></div>
+                <div style="--x: -40px; --y: -600px"></div>
+                <div style="--x: -540px; --y: -540px"></div>
+                <div style="--x: -900px; --y: -420px"></div>
+              </div>
+              <lg-dots data-glass for="slides"></lg-dots>
+            </div>
+            <div class="meta">
+              <h3>Page dots</h3>
+              <p>
+                Swipe the slides, tap a dot, or drag across the dots to scrub. <code>for</code> points at any
+                scroll-snap container and follows its pages.
               </p>
               <pre><code></code></pre>
             </div>
@@ -948,6 +993,13 @@
                   </td>
                 </tr>
                 <tr>
+                  <td>&lt;lg-dots&gt;</td>
+                  <td>
+                    <code>for="id"</code> follows a scroll-snap container's pages, or <code>count="n"</code>. Tap, drag
+                    to scrub, arrow keys. Property <code>.value</code>, fires <code>change</code>.
+                  </td>
+                </tr>
+                <tr>
                   <td>&lt;lg-segmented&gt;</td>
                   <td>
                     Children are the segments. <code>.value</code> = selected index, fires <code>change</code>. Add
@@ -988,14 +1040,14 @@
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">20.7 KB</span> · <span data-size="gzip">7.4 KB</span> gzipped</small
+                >Minified · <span data-size="min">22.9 KB</span> · <span data-size="gzip">7.9 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">31.4 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">34.2 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">7.4 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">7.9 KB</span> gzipped.</span>
         </div>
       </section>
     </main>

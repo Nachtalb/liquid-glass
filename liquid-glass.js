@@ -578,6 +578,62 @@ class LgStepper extends Base {
   }
 }
 
+// Page dots. With for="id" they follow that scroll-snap container's children, otherwise count="n".
+// Tap a dot, drag across them to scrub, or use the arrow keys.
+class LgDots extends Base {
+  connectedCallback() {
+    if (this.role) return;
+    this.target = document.getElementById(this.getAttribute('for'));
+    const n = this.target ? this.target.children.length : +this.getAttribute('count') || 0;
+    this.role = 'tablist';
+    this.innerHTML = Array.from(
+      { length: n },
+      (_, i) => `<button type="button" role="tab" aria-label="Page ${i + 1}"></button>`,
+    ).join('');
+    this.addEventListener('click', e => this.go([...this.children].indexOf(e.target.closest('button'))));
+    this.addEventListener('keydown', e => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (!d) return;
+      e.preventDefault();
+      this.go(this.index + d);
+      this.children[this.index].focus();
+    });
+    onDrag(
+      this,
+      e => {
+        const r = this.getBoundingClientRect();
+        this.go(Math.floor(((e.clientX - r.left) / r.width) * this.children.length));
+      },
+      (e, dragged) => dragged && swallowClick(this),
+    );
+    this.target?.addEventListener('scrollsnapchanging', e =>
+      this.select([...this.target.children].indexOf(e.snapTargetInline)),
+    );
+    this.select(+this.getAttribute('value') || 0);
+  }
+  // user navigation: select, fire change, bring the page into view
+  go(i) {
+    if (i < 0 || i >= this.children.length || i === this.index) return;
+    this.select(i);
+    this.dispatchEvent(new Event('change', { bubbles: true }));
+    this.target?.children[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+  }
+  select(i) {
+    if (i < 0) return;
+    [...this.children].forEach((b, j) => {
+      b.ariaSelected = j === i;
+      b.tabIndex = j === i ? 0 : -1;
+    });
+    this.index = i;
+  }
+  get value() {
+    return this.index;
+  }
+  set value(i) {
+    this.go(i);
+  }
+}
+
 const CSS = `
 ${Object.keys(DEFAULTS)
   .map(k => `@property --lg-${k} { syntax: '*'; inherits: false; }`)
@@ -724,8 +780,19 @@ lg-stepper {
   }
   & button:last-of-type::before { content: ''; position: absolute; left: 0; top: 28%; bottom: 28%; width: 1px; background: currentColor; opacity: .2; }
 }
+lg-dots {
+  display: inline-flex; vertical-align: middle; padding: .2em .4em; border-radius: 999px; touch-action: pan-y; user-select: none;
+  /* no padding on the dots, so a page-wide box-sizing reset can't shrink them; the button is the hit area, ::after the dot */
+  & button {
+    all: unset; display: grid; place-items: center; width: 1.1em; height: 1.1em; border-radius: 999px; cursor: pointer;
+    transition: width .4s var(--lg-glide); /* one dot grows as another shrinks: the capsule keeps its size */
+    &::after { content: ''; width: .5em; height: .5em; border-radius: 999px; background: currentColor; opacity: .4; transition: width .4s var(--lg-glide), opacity .2s; }
+    &[aria-selected=true] { width: 2em; &::after { width: 1.4em; opacity: 1; } }
+    &:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: -2px; }
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .lg-btn, .lg-menu, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper * { transition-duration: 0s !important; }
+  .lg-btn, .lg-menu, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
 }
 }`;
 
@@ -737,6 +804,7 @@ if (globalThis.document) {
   customElements.define('lg-slider', LgSlider);
   customElements.define('lg-segmented', LgSegmented);
   customElements.define('lg-stepper', LgStepper);
+  customElements.define('lg-dots', LgDots);
 
   const scan = (node, fn) => {
     if (node.nodeType !== 1) return;
