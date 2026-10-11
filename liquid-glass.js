@@ -862,8 +862,24 @@ lg-dots {
   @starting-style { &:popover-open { translate: 0 calc(-100% - 1.5em); } }
   &[data-dragging] { transition: none; cursor: grabbing; }
 }
+.lg-alert {
+  position: fixed; /* [data-glass] sets relative, which would pin a modal to the top of the page */
+  border: 0; padding: 1.3em 1.2em 1.1em; border-radius: 1.75em; width: min(19em, calc(100vw - 2em)); text-align: center;
+  --lg-blur: 6; --lg-tint: light-dark(rgb(250 250 252 / .7), rgb(36 37 41 / .7)); color: light-dark(#111, #f4f4f5);
+  scale: .92; transition: scale .15s ease-in, display .15s allow-discrete, overlay .15s allow-discrete;
+  &[open] { scale: 1; transition: scale .5s var(--lg-spring), display .5s allow-discrete, overlay .5s allow-discrete; }
+  @starting-style { &[open] { scale: 1.12; } }
+  &::backdrop { background: transparent; transition: background-color .25s, display .25s allow-discrete, overlay .25s allow-discrete; }
+  &[open]::backdrop { background: rgb(0 0 0 / .3); }
+  @starting-style { &[open]::backdrop { background: transparent; } }
+  & h2 { margin: 0 0 .35em; font-size: 1.05em; }
+  & p { margin: 0 0 1.1em; font-size: .9em; opacity: .8; }
+  & form { display: flex; gap: .5em; }
+  & form > * { flex: 1; }
+  & .lg-btn:not(.lg-tinted) { background-color: rgb(127 127 127 / .2); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .lg-btn, .lg-menu, .lg-tip, .lg-toast, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
+  .lg-btn, .lg-menu, .lg-tip, .lg-toast, .lg-alert, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
 }
 }`;
 

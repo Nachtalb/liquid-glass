@@ -67,14 +67,14 @@
         --lg-accent: var(--accent);
       }
       h1,
-      h2,
+      .sec-head h2,
       h3 {
         font-family: var(--display);
         font-stretch: 125%;
         text-wrap: balance;
         margin: 0;
       }
-      h2 {
+      .sec-head h2 {
         font-size: clamp(1.6rem, 3vw, 2.1rem);
         font-weight: 800;
         letter-spacing: -0.01em;
@@ -944,6 +944,28 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
           </article>
 
           <article class="card">
+            <div class="stage" style="--x: -900px; --y: -330px" data-snippet>
+              <button class="lg-btn" data-glass commandfor="alert" command="show-modal">Delete scan…</button>
+              <dialog class="lg-alert" data-glass id="alert">
+                <h2>Delete this scan?</h2>
+                <p>The extraction and its report are removed from the case. This can't be undone.</p>
+                <form method="dialog">
+                  <button class="lg-btn" value="cancel" autofocus>Cancel</button>
+                  <button class="lg-btn lg-tinted" value="delete" style="--lg-accent: #ff453a">Delete</button>
+                </form>
+              </dialog>
+            </div>
+            <div class="meta">
+              <h3>Alert</h3>
+              <p>
+                A native <code>&lt;dialog&gt;</code>, opened with <code>commandfor</code> and no script. The buttons
+                close it, and <code>returnValue</code> says which one was pressed.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage paper" style="--x: -610px; --y: -90px" data-snippet>
               <div class="orb" data-glass style="--lg-zoom: 1.8; --lg-profile: circle"></div>
               <span data-glass style="border-radius: 14px; padding: 8px 14px; --lg-blur: 3">Any element</span>
@@ -1154,6 +1176,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
                   <td>Right-click or long-press inside opens the <code>.lg-menu</code> with that id at the pointer.</td>
                 </tr>
                 <tr>
+                  <td>.lg-alert</td>
+                  <td>
+                    On a <code>&lt;dialog&gt;</code>. Open it with <code>showModal()</code> or
+                    <code>command="show-modal"</code>; buttons in a <code>&lt;form method="dialog"&gt;</code> close it
+                    with their <code>value</code>.
+                  </td>
+                </tr>
+                <tr>
                   <td>.lg-tip</td>
                   <td>
                     On a <code>popover="hint"</code> element, opened by <code>interestfor="id"</code> on its trigger.
@@ -1190,14 +1220,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">27.0 KB</span> · <span data-size="gzip">8.9 KB</span> gzipped</small
+                >Minified · <span data-size="min">28.1 KB</span> · <span data-size="gzip">9.1 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">40.1 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">41.2 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">8.9 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">9.1 KB</span> gzipped.</span>
         </div>
       </section>
     </main>
@@ -1417,6 +1447,11 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
 
       // Toast card
       $('#toast-btn').addEventListener('click', () => toast('Lens 2 is back in spec · 0.04 λ RMS'));
+
+      // Alert card reports the choice
+      $('#alert').addEventListener('close', e =>
+        toast(e.target.returnValue === 'delete' ? 'Scan deleted' : 'Kept the scan'),
+      );
 
       // Stepper card shows its value
       $('lg-stepper[name=guests]').addEventListener('input', e => ($('#guests').value = e.target.value));
