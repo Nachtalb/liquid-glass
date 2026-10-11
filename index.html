@@ -1,0 +1,971 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>liquid-glass.js</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an optical bench. Printed test charts are the backdrop, glass sits on top, specimen cards follow. */
+:root {
+  --bg: #e7eaed; --surface: #f6f7f8; --fg: #0f1215; --muted: #5a636d; --line: #ccd2d8; --accent: #0a7cff;
+  --code-bg: #eceff2;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, Menlo, Consolas, monospace;
+  --chart-dark: none; --chart-light: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0b0d0f; --surface: #121519; --fg: #e5e8eb; --muted: #8a949e; --line: #242a31; --accent: #3a96ff; --code-bg: #171b20; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0b0d0f; --surface: #121519; --fg: #e5e8eb; --muted: #8a949e; --line: #242a31; --accent: #3a96ff; --code-bg: #171b20; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body); padding-inline: 16px; padding-block: 0 140px; --lg-accent: var(--accent); }
+h1, h2, h3 { font-family: var(--display); font-stretch: 125%; text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 800; letter-spacing: -.01em; }
+h3 { font-size: 1rem; font-weight: 700; }
+p { margin: 0; }
+a { color: inherit; }
+code, pre { font-family: var(--mono); font-size: 12.5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; opacity: .75; }
+
+/* chart backdrops */
+.stage {
+  --grid: rgb(255 255 255 / .09); position: relative; color: #f1f2ee; color-scheme: dark;
+  background-color: #16181b; background-image: var(--chart-dark), linear-gradient(90deg, var(--grid) 1px, #0000 1px), linear-gradient(var(--grid) 1px, #0000 1px);
+  background-size: 1280px 820px, 40px 40px, 40px 40px; background-repeat: no-repeat, repeat, repeat;
+  background-position: var(--x, 0px) var(--y, 0px);
+}
+.stage.paper { --grid: rgb(0 0 0 / .08); color: #131416; color-scheme: light; background-color: #eceee9; background-image: var(--chart-light), linear-gradient(90deg, var(--grid) 1px, #0000 1px), linear-gradient(var(--grid) 1px, #0000 1px); }
+
+/* bench (hero) */
+.bench {
+  margin-inline: -16px; min-height: 640px; padding: 16px clamp(16px, 4vw, 40px) 36px; overflow: hidden;
+  border-radius: 0 0 32px 32px; display: grid; gap: 24px;
+  grid-template-columns: minmax(0, 30rem) minmax(0, 1fr) minmax(0, 330px); grid-template-rows: auto 1fr;
+}
+.topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+.brand { font: 800 15px/1 var(--display); font-stretch: 125%; margin-right: auto; padding-left: 4px; white-space: nowrap; }
+.topbar .lg-field { width: min(320px, 46vw); }
+.copy { grid-column: 1; align-self: end; display: grid; gap: 14px; --lg-blur: 2.5; --lg-tint: rgb(14 16 19 / .42); }
+.copy h1 { font-size: clamp(2.1rem, 4.6vw, 3.5rem); line-height: .98; font-weight: 800; letter-spacing: -.015em; }
+.copy p:not(.eyebrow) { color: rgb(241 242 238 / .82); max-width: 32rem; }
+.copy .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.control { grid-column: 3; align-self: end; display: grid; gap: 14px; --lg-tint: rgb(14 16 19 / .5); --lg-blur: 3; }
+.control .ctl { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.control .eyebrow { margin-bottom: -4px; }
+.control lg-segmented { justify-self: stretch; font-size: 13px; }
+.lens { position: absolute; left: 43%; top: 112px; width: 176px; height: 176px; border-radius: 50%; cursor: grab; touch-action: none;
+  --lg-zoom: 1.6; --lg-bezel: 40; --lg-thickness: 70; --lg-specular: .8; background: rgb(255 255 255 / .04); box-shadow: 0 18px 40px rgb(0 0 0 / .35); }
+.lens:active { cursor: grabbing; }
+.hint { position: absolute; left: 43%; top: 300px; width: 176px; text-align: center; font: 500 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; opacity: .7; pointer-events: none; }
+
+@media (max-width: 860px) {
+  .bench { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 190px auto auto; --x: -500px; }
+  .copy { grid-column: 1; grid-row: 3; }
+  .control { grid-column: 1; grid-row: 4; }
+  .lens { left: auto; right: 24px; top: 80px; width: 140px; height: 140px; }
+  .hint { display: none; }
+}
+
+/* sections */
+main { max-width: 1240px; margin: 0 auto; }
+.sec { padding-top: 72px; display: grid; gap: 22px; scroll-margin-top: 8px; }
+.sec-head { display: grid; gap: 6px; max-width: 44rem; }
+.sec-head p { color: var(--muted); }
+
+.cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; display: grid; grid-template-rows: 210px auto; min-width: 0; }
+.card[hidden] { display: none; }
+.card .stage { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; padding: 20px; }
+.card .meta { padding: 16px 18px 18px; display: grid; gap: 8px; min-width: 0; align-content: start; }
+.card .meta p { color: var(--muted); font-size: 14px; }
+pre { margin: 0; background: var(--code-bg); border-radius: 12px; padding: 12px 14px; overflow-x: auto; line-height: 1.5; }
+.opt { display: flex; align-items: center; gap: 12px; font-weight: 500; }
+.stack { display: grid; gap: 12px; }
+.orb { width: 130px; height: 130px; border-radius: 50%; }
+.note { width: min(100%, 300px); display: grid; gap: 4px; }
+.note small { opacity: .7; font-family: var(--mono); font-size: 11px; }
+
+/* playground */
+.pg { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); align-items: start; }
+.pg-stage { border-radius: 22px; min-height: 480px; display: grid; place-items: center; padding: 24px; overflow: hidden; }
+#pg { display: grid; place-items: center; max-width: 100%; font: 600 13px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: rgb(255 255 255 / .7); }
+.pg-side { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 18px; display: grid; gap: 10px; min-width: 0; }
+.pg-row { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) 3.2rem; align-items: center; gap: 10px; font: 500 12px var(--mono); }
+.pg-row output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.pg-row:has(lg-segmented) { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.pg-row lg-segmented { font-size: 12px; }
+.map { margin: 6px 0 0; display: grid; gap: 4px; }
+.map img { width: 100%; aspect-ratio: 2 / 1; object-fit: contain; border-radius: 10px; background: #1b1e22; }
+.map figcaption { font: 11px var(--mono); color: var(--muted); }
+@media (max-width: 860px) { .pg { grid-template-columns: minmax(0, 1fr); } .pg-stage { min-height: 360px; } }
+
+/* api */
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font: 500 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+td:first-child { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+td code { background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+.api-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+
+/* dock */
+.dock { position: fixed; z-index: 10; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); translate: -50% 0;
+  color: var(--fg); --lg-tint: color-mix(in srgb, var(--bg) 45%, transparent); --lg-blur: 1.5; box-shadow: 0 10px 30px rgb(0 0 0 / .22); }
+.dock > a { text-decoration: none; }
+@media (max-width: 480px) { .dock > a { padding-inline: .7em; } }
+</style>
+
+<header class="bench stage" id="bench">
+  <nav class="topbar" aria-label="Page">
+    <span class="brand">liquid-glass.js</span>
+    <label class="lg-field" data-glass>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Filter components" aria-label="Filter components">
+    </label>
+    <button class="lg-btn lg-round" data-glass id="theme" aria-label="Toggle light and dark theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
+    </button>
+  </nav>
+
+  <div class="copy lg-panel" data-glass>
+    <p class="eyebrow">Snell refraction · SVG displacement · backdrop-filter</p>
+    <h1>Glass that bends what sits behind it.</h1>
+    <p>One ES module, no dependencies. Custom elements for switches, sliders and segmented controls, classes for buttons, fields, panels and menus, and <code>data-glass</code> for anything else. Chromium only.</p>
+    <div class="row">
+      <a class="lg-btn lg-tinted" data-glass href="liquid-glass.js" download>Download liquid-glass.js</a>
+      <a class="lg-btn" data-glass href="#playground">Open playground</a>
+      <a class="lg-btn" data-glass href="#api">Read the API</a>
+    </div>
+  </div>
+
+  <div class="control lg-panel" data-glass>
+    <p class="eyebrow">Bench controls</p>
+    <label class="ctl">Refraction <lg-switch id="cRefr" checked></lg-switch></label>
+    <label class="ctl">Specular rim <lg-switch id="cSpec" checked></lg-switch></label>
+    <label class="stack"><span class="ctl">Lens zoom <output id="cZoomOut">1.60×</output></span><lg-slider id="cZoom" min="1" max="3" step="0.05" value="1.6"></lg-slider></label>
+    <lg-segmented id="cProfile" data-glass aria-label="Lens profile"><button>Squircle</button><button>Circle</button><button>Lip</button><button>Concave</button></lg-segmented>
+  </div>
+
+  <div class="lens" id="lens" data-glass aria-hidden="true"></div>
+  <p class="hint" aria-hidden="true">Drag the lens</p>
+</header>
+
+<main>
+  <section class="sec" id="components">
+    <div class="sec-head">
+      <p class="eyebrow">Specimens</p>
+      <h2>Components</h2>
+      <p>Each snippet below is the exact markup of the specimen above it. Native inputs do the work underneath, so forms, labels and keyboard support behave as usual.</p>
+    </div>
+    <div class="cards">
+      <article class="card">
+        <div class="stage" style="--x:-900px;--y:-110px" data-snippet>
+          <button class="lg-btn" data-glass>Share</button>
+          <button class="lg-btn lg-round" data-glass aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="lg-btn lg-tinted" data-glass>Done</button>
+        </div>
+        <div class="meta"><h3>Buttons</h3><p>Pill, round and tinted. They swell on press.</p><pre><code></code></pre></div>
+      </article>
+
+      <article class="card">
+        <div class="stage paper" style="--x:-40px;--y:-40px" data-snippet>
+          <div class="stack">
+            <label class="opt"><lg-switch name="wifi" checked></lg-switch> Wi-Fi</label>
+            <label class="opt"><lg-switch name="airdrop"></lg-switch> AirDrop</label>
+          </div>
+        </div>
+        <div class="meta"><h3>Switch</h3><p>The thumb turns into a lip-profile lens while pressed. Wraps a native checkbox with <code>role="switch"</code>.</p><pre><code></code></pre></div>
+      </article>
+
+      <article class="card">
+        <div class="stage" style="--x:-1030px;--y:-300px" data-snippet>
+          <lg-slider name="volume" value="40" aria-label="Volume" style="width:85%"></lg-slider>
+        </div>
+        <div class="meta"><h3>Slider</h3><p>Press and drag: the thumb becomes a lens over the track. Wraps <code>&lt;input type="range"&gt;</code>.</p><pre><code></code></pre></div>
+      </article>
+
+      <article class="card">
+        <div class="stage" style="--x:-150px;--y:-600px" data-snippet>
+          <lg-segmented data-glass>
+            <button>Day</button><button>Week</button><button>Month</button><button>Year</button>
+          </lg-segmented>
+        </div>
+        <div class="meta"><h3>Segmented control</h3><p>Equal-width segments with a sliding glass indicator. Arrow keys move the selection and fire <code>change</code>.</p><pre><code></code></pre></div>
+      </article>
+
+      <article class="card">
+        <div class="stage paper" style="--x:-560px;--y:-420px" data-snippet>
+          <lg-segmented class="lg-tabbar" data-glass>
+            <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>Photos</button>
+            <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>Albums</button>
+            <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search</button>
+          </lg-segmented>
+        </div>
+        <div class="meta"><h3>Tab bar &amp; pill nav</h3><p>The same element with <code>.lg-tabbar</code>. Give it links instead of buttons for page navigation (<code>aria-current</code>), like the dock at the bottom of this page.</p><pre><code></code></pre></div>
+      </article>
+
+      <article class="card">
+        <div class="stage" style="--x:-120px;--y:-610px" data-snippet>
+          <label class="lg-field" data-glass style="width:min(100%, 300px)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" placeholder="Search" aria-label="Search">
+          </label>
+        </div>
+        <div class="meta"><h3>Search field</h3><p>A label wrapping a native input, so clicking anywhere on the glass focuses it.</p><pre><code></code></pre></div>
+      </article>
+
+      <article class="card">
+        <div class="stage" style="--x:-1040px;--y:-110px" data-snippet>
+          <button class="lg-btn" data-glass popovertarget="sort">Sort by</button>
+          <div class="lg-menu" data-glass popover id="sort">
+            <button>Name</button><button>Date modified</button><button>Size</button><hr><button>Reverse order</button>
+          </div>
+        </div>
+        <div class="meta"><h3>Menu</h3><p>The Popover API plus anchor positioning, with no positioning script. Picking an item closes it.</p><pre><code></code></pre></div>
+      </article>
+
+      <article class="card">
+        <div class="stage" style="--x:-20px;--y:-590px" data-snippet>
+          <div class="lg-panel note" data-glass>
+            <small>CALIBRATION · NOW</small>
+            <strong>Lens 2 is back in spec</strong>
+            <span>Wavefront error 0.04 λ RMS at 633 nm.</span>
+          </div>
+        </div>
+        <div class="meta"><h3>Panel</h3><p>A rounded container for cards, sheets and notifications. Works on <code>&lt;dialog&gt;</code> too.</p><pre><code></code></pre></div>
+      </article>
+
+      <article class="card">
+        <div class="stage paper" style="--x:-610px;--y:-90px" data-snippet>
+          <div class="orb" data-glass style="--lg-zoom:1.8; --lg-profile:circle"></div>
+          <span data-glass style="border-radius:14px; padding:8px 14px; --lg-blur:3">Any element</span>
+        </div>
+        <div class="meta"><h3>Any element</h3><p><code>data-glass</code> on anything with a border radius. Tune it per element with <code>--lg-*</code> properties, or call <code>glass(el, opts)</code>.</p><pre><code></code></pre></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="sec" id="playground">
+    <div class="sec-head">
+      <p class="eyebrow">Playground</p>
+      <h2>Every option, live</h2>
+      <p>Geometry changes (size, radius, bezel, thickness, profile, index, light, zoom) rebuild the maps. Refraction, blur, saturation and specular only change filter attributes, so they are cheap to animate.</p>
+    </div>
+    <div class="pg">
+      <div class="stage pg-stage" style="--x:-460px;--y:-40px"><div id="pg" data-glass>Glass</div></div>
+      <div class="pg-side" id="pgSide">
+        <div class="pg-row"><span>profile</span><lg-segmented id="pgProfile" aria-label="Profile"><button>squircle</button><button>circle</button><button>lip</button><button>concave</button></lg-segmented></div>
+        <figure class="map"><img id="mapD" alt="Generated map"><figcaption>Generated map · R = x shift, G = y shift, B = rim light</figcaption></figure>
+        <pre><code id="pgCss"></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="api">
+    <div class="sec-head">
+      <p class="eyebrow">Reference</p>
+      <h2>API</h2>
+      <p>Load the module once with <code>&lt;script type="module" src="liquid-glass.js"&gt;&lt;/script&gt;</code>. It adds its styles in a cascade layer, so any unlayered CSS of yours wins.</p>
+    </div>
+    <div class="api-grid">
+      <div class="tbl"><table>
+        <thead><tr><th>Option</th><th>Default</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td>--lg-profile</td><td>squircle</td><td>Bezel shape: <code>squircle</code>, <code>circle</code>, <code>lip</code> or <code>concave</code></td></tr>
+          <tr><td>--lg-bezel</td><td>auto</td><td>Width of the curved edge in px (auto = 0.8 × radius)</td></tr>
+          <tr><td>--lg-thickness</td><td>auto</td><td>Glass height in px (auto = 1.2 × bezel). More = stronger bend</td></tr>
+          <tr><td>--lg-ior</td><td>1.5</td><td>Refractive index</td></tr>
+          <tr><td>--lg-refraction</td><td>1</td><td>Multiplier on the physical displacement</td></tr>
+          <tr><td>--lg-blur</td><td>1</td><td>Frost, as a Gaussian blur in px</td></tr>
+          <tr><td>--lg-saturation</td><td>5</td><td>Colour boost under the rim highlight</td></tr>
+          <tr><td>--lg-specular</td><td>0.7</td><td>Rim highlight opacity</td></tr>
+          <tr><td>--lg-light</td><td>225</td><td>Light angle in degrees (0 = from the right, 90 = from below)</td></tr>
+          <tr><td>--lg-zoom</td><td>1</td><td>Magnification of the flat centre</td></tr>
+        </tbody>
+      </table></div>
+      <div class="tbl"><table>
+        <thead><tr><th>Piece</th><th>Usage</th></tr></thead>
+        <tbody>
+          <tr><td>glass(el, opts)</td><td>Applies glass to any element and returns <code>{ filter, update(opts), destroy() }</code>. Also available as <code>el.glass</code>.</td></tr>
+          <tr><td>[data-glass]</td><td>Applied automatically, including to elements added later. Removing the attribute or the element cleans up. The glass is drawn on the element's <code>::before</code>, so keep that pseudo-element free and avoid <code>opacity</code> below 1 on the element.</td></tr>
+          <tr><td>&lt;lg-switch&gt;</td><td>Attributes pass through to the inner checkbox (<code>name</code>, <code>checked</code>, <code>disabled</code>…). Property <code>.checked</code>.</td></tr>
+          <tr><td>&lt;lg-slider&gt;</td><td><code>min</code>, <code>max</code>, <code>step</code>, <code>value</code>, <code>name</code> pass through. Property <code>.value</code>.</td></tr>
+          <tr><td>&lt;lg-segmented&gt;</td><td>Children are the segments. <code>.value</code> = selected index, fires <code>change</code>. Add <code>.lg-tabbar</code> for icon tabs.</td></tr>
+          <tr><td>.lg-btn</td><td>Variants <code>.lg-round</code> and <code>.lg-tinted</code></td></tr>
+          <tr><td>.lg-field · .lg-panel · .lg-menu</td><td>Search field, container, popover menu</td></tr>
+          <tr><td>--lg-accent · --lg-tint</td><td>Theme colour and glass fill. Normal inherited custom properties.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:24px">
+      <a class="lg-btn lg-tinted" data-glass href="liquid-glass.js" download>Download liquid-glass.js</a>
+      <span style="opacity:.7">One file, ~28 KB, no dependencies. ES module.</span>
+    </div>
+  </section>
+</main>
+
+<lg-segmented class="lg-tabbar dock" data-glass aria-label="Sections">
+  <a href="#bench"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Bench</a>
+  <a href="#components"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>Components</a>
+  <a href="#playground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>Playground</a>
+  <a href="#api"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/></svg>API</a>
+</lg-segmented>
+
+<script>
+  // Snippets: copy each specimen's markup before the custom elements upgrade it.
+  for (const el of document.querySelectorAll('[data-snippet]')) {
+    const lines = el.innerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '<svg>…</svg>').replace(/=""/g, '').replace(/^\n+|\s+$/g, '').split('\n');
+    const pad = Math.min(...lines.filter(l => l.trim()).map(l => l.match(/^ */)[0].length));
+    el.closest('.card').querySelector('pre code').textContent = lines.map(l => l.slice(pad)).join('\n');
+  }
+</script>
+
+<script type="module">
+// ---- liquid-glass.js (inlined) ----
+// liquid-glass.js — Apple-style Liquid Glass for Chromium (SVG filter as backdrop-filter).
+// Technique: https://kube.io/blog/liquid-glass-css-svg/
+//
+//   <script type="module" src="liquid-glass.js"><\/script>
+//   <div data-glass style="border-radius:24px">…</div>          any element
+//   <lg-switch> <lg-slider> <lg-segmented>                      components
+//   .lg-btn .lg-field .lg-panel .lg-menu .lg-tabbar             classes (+ data-glass)
+//
+// Tune per element with CSS custom properties (non-inherited) or glass(el, opts):
+//   --lg-profile squircle|circle|concave|lip   --lg-bezel px   --lg-thickness px   --lg-ior
+//   --lg-refraction 0..n   --lg-blur px   --lg-saturation   --lg-specular 0..1   --lg-light deg
+//   --lg-zoom (>1 magnifies)
+// Values are read when the element is first glassed and on every resize. Call el.glass.update() after changing them.
+//
+// The backdrop-filter lives on the element's ::before (inset: 0, z-index: -1), not on the element itself:
+// Chromium offsets feImage by the element's ink overflow (shadows, outlines, overflowing children),
+// and a bare ::before has none. Side effects: glass elements get position: relative + isolation: isolate,
+// their own ::before is taken, and opacity < 1 on the element hides what is behind the glass.
+
+const DEFAULTS = {
+  profile: 'squircle', bezel: 'auto', thickness: 'auto', ior: 1.5, refraction: 1,
+  blur: 1, saturation: 5, specular: 0.7, light: 225, zoom: 1,
+};
+
+const smootherstep = t => t * t * t * (t * (t * 6 - 15) + 10);
+// Glass height across the bezel: u = 0 at the outer edge, 1 where the flat top starts.
+export const profiles = {
+  circle: u => Math.sqrt(1 - (1 - u) ** 2),
+  squircle: u => (1 - (1 - u) ** 4) ** 0.25,
+  concave: u => 1 - profiles.squircle(u),
+  lip: u => profiles.squircle(u) + (profiles.concave(u) - profiles.squircle(u)) * smootherstep(u),
+};
+
+// Horizontal displacement (px, + = towards the centre) of a vertical ray hitting the bezel at n
+// points. One refraction (Snell), air → glass, glass sits directly on the background.
+export function bezelDisplacement(f, bezel, thickness, ior, n = 128) {
+  const out = new Float32Array(n), eta = 1 / ior, d = 1e-3;
+  for (let i = 0; i < n; i++) {
+    const u = i / n, a = Math.max(0, u - d), b = Math.min(1, u + d);
+    const slope = (f(b) - f(a)) / (b - a) * thickness / bezel;
+    const len = Math.hypot(slope, 1), nx = -slope / len, nz = 1 / len; // surface normal, x points inward
+    const c = eta * nz - Math.sqrt(1 - eta * eta * (1 - nz * nz));
+    const tx = c * nx, tz = c * nz - eta; // refracted direction (incident = (0, -1))
+    out[i] = tx * f(u) * thickness / -tz;
+  }
+  return out;
+}
+
+// RGBA map for a rounded rect: R = x and G = y displacement (128 = none), B = rim light, A = 255.
+// Plus a magnifier map if zoom ≠ 1. scale/zscale are the matching feDisplacementMap scales.
+// res < 1 renders the maps smaller; feImage stretches them back (the fields are smooth).
+export function computeMaps(w, h, { radius: r, bezel, thickness, profile, ior, light, zoom }, res = 1) {
+  const W = Math.ceil(w * res), H = Math.ceil(h * res), n = 128;
+  const disp = bezelDisplacement(profiles[profile] ?? profiles.squircle, bezel, thickness, ior, n);
+  // Physics says 0 right at the rim, then a near-vertical climb to the peak: hold the peak out to the rim
+  // instead, or that cliff aliases into a sawtooth edge.
+  const peak = disp.reduce((p, v, i) => Math.abs(v) > Math.abs(disp[p]) ? i : p, 0);
+  disp.fill(disp[peak], 0, peak);
+  const max = Math.abs(disp[peak]) || 1;
+  const lx = Math.cos(light * Math.PI / 180), ly = Math.sin(light * Math.PI / 180);
+  const dmap = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const px = (x + 0.5) * w / W - w / 2, py = (y + 0.5) * h / H - h / 2; // feImage stretches W×H onto w×h
+    const qx = Math.abs(px) - w / 2 + r, qy = Math.abs(py) - h / 2 + r;
+    let e, nx = 0, ny = 0; // e: distance inside the edge, (nx, ny): outward edge normal
+    if (qx > 0 && qy > 0) { const l = Math.hypot(qx, qy); e = r - l; nx = qx / l; ny = qy / l }
+    else if (qx > qy) { e = r - qx; nx = 1 } else { e = r - qy; ny = 1 }
+    nx *= Math.sign(px) || 1; ny *= Math.sign(py) || 1;
+    let dx = 0, dy = 0, s = 0;
+    if (e < bezel) { // outside the shape too (e < 0): keeps low-res maps from stair-stepping, the clip draws the edge
+      const ee = Math.max(e, 0), m = disp[Math.min(n - 1, ee / bezel * n | 0)];
+      dx = -nx * m; dy = -ny * m;
+      s = (nx * lx + ny * ly) ** 2 * Math.exp(-ee / Math.max(2, 1 / res)); // rim light, strongest facing the light axis
+    }
+    const i = (y * W + x) * 4;
+    dmap[i] = 128 + dx / max * 127; dmap[i + 1] = 128 + dy / max * 127; dmap[i + 2] = s * 255; dmap[i + 3] = 255;
+  }
+  // Magnifier: sample towards the centre. The field is linear and feImage upscaling interpolates it
+  // exactly, so ≤32px is plenty. Per-axis range (not the diagonal) keeps the 8-bit steps finer.
+  const z = 1 - 1 / zoom, zmax = Math.max(w, h) / 2 * Math.abs(z) || 1;
+  const ZW = z ? Math.min(32, W) : 0, ZH = z ? Math.min(32, H) : 0, zmap = z ? new Uint8ClampedArray(ZW * ZH * 4) : null;
+  for (let y = 0; y < ZH; y++) for (let x = 0; x < ZW; x++) {
+    const i = (y * ZW + x) * 4;
+    zmap[i] = 128 - ((x + 0.5) * w / ZW - w / 2) * z / zmax * 127;
+    zmap[i + 1] = 128 - ((y + 0.5) * h / ZH - h / 2) * z / zmax * 127;
+    zmap[i + 2] = 128; zmap[i + 3] = 255;
+  }
+  // feDisplacementMap moves by scale × (C − 0.5), so a full ±127 step is only half the scale
+  return { W, H, dmap, ZW, ZH, zmap, scale: 2 * max, zscale: z ? 2 * zmax : 0 };
+}
+
+// ---------------------------------------------------------------- DOM (browser only)
+
+const NS = 'http://www.w3.org/2000/svg';
+// Chromium re-sends a reference filter, feImage pixels included, with every compositor frame,
+// so the chain carries one small map and skips the zoom stage unless it is used.
+const FILTER = zoom => `${zoom ? `
+<feImage preserveAspectRatio="none" result="zmap"/>
+<feDisplacementMap in="SourceGraphic" in2="zmap" xChannelSelector="R" yChannelSelector="G" result="zoomed"/>` : ''}
+<feGaussianBlur in="${zoom ? 'zoomed' : 'SourceGraphic'}" edgeMode="duplicate" result="blur"/>
+<feImage preserveAspectRatio="none" result="map"/>
+<feDisplacementMap in="blur" in2="map" xChannelSelector="R" yChannelSelector="G" result="refracted"/>
+<feColorMatrix in="refracted" type="saturate" result="saturated"/>
+<feColorMatrix in="map" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 1 0 0" result="rimlight"/>
+<feComposite in="saturated" in2="rimlight" operator="in" result="rim"/>
+<feComponentTransfer in="rimlight" result="highlight"><feFuncA type="linear"/></feComponentTransfer>
+<feBlend in="rim" in2="refracted" result="rimmed"/>
+<feBlend in="highlight" in2="rimmed"/>`;
+
+let uid = 0, svg;
+const cache = new Map(); // geometry key → map URLs + scales, small LRU
+
+function mapsFor(key, make) {
+  let v = cache.get(key);
+  if (v) cache.delete(key); else v = make();
+  cache.set(key, v);
+  if (cache.size > 64) cache.delete(cache.keys().next().value);
+  return v;
+}
+
+function toURL(data, W, H) {
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  c.getContext('2d').putImageData(new ImageData(data, W, H), 0, 0);
+  return c.toDataURL();
+}
+
+function readOpts(el, opts) {
+  const cs = getComputedStyle(el), o = {};
+  for (const k in DEFAULTS) {
+    const v = String(opts[k] ?? cs.getPropertyValue('--lg-' + k)).trim(), n = parseFloat(v);
+    o[k] = v === '' ? DEFAULTS[k] : isNaN(n) ? v : n;
+  }
+  return [o, cs];
+}
+
+// Glass outside the viewport (plus a margin) drops its filter, so it costs nothing per frame.
+const onScreen = globalThis.IntersectionObserver && new IntersectionObserver(
+  entries => entries.forEach(e => e.target.glass?.show(e.isIntersecting)), { rootMargin: '25%' });
+
+export function glass(el, opts = {}) {
+  if (el.glass) return el.glass;
+  if (!el.hasAttribute('data-glass')) el.setAttribute('data-glass', ''); // the ::before rule keys off it
+  if (!svg) {
+    svg = document.body.appendChild(document.createElementNS(NS, 'svg'));
+    svg.setAttribute('style', 'position:absolute;width:0;height:0;pointer-events:none');
+    svg.setAttribute('aria-hidden', 'true');
+  }
+  const filter = svg.appendChild(document.createElementNS(NS, 'filter'));
+  filter.id = 'lg-' + ++uid;
+  filter.setAttribute('color-interpolation-filters', 'sRGB'); // linearRGB would skew the map values
+  for (const [a, v] of [['x', 0], ['y', 0], ['width', 1], ['height', 1]]) filter.setAttribute(a, v); // default region is 144% of the area
+  const fe = {}; // primitives by result name
+  let key, zoomed, shown = true;
+  const show = () => el.style.setProperty('--lg-filter', shown ? `url(#${filter.id})` : 'none');
+
+  const render = () => {
+    const [o, cs] = readOpts(el, opts), b = parseFloat(cs.borderLeftWidth), br = cs.borderTopLeftRadius;
+    const w = el.offsetWidth - b - parseFloat(cs.borderRightWidth), h = el.offsetHeight - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth);
+    if (w <= 0 || h <= 0) return;
+    const half = Math.min(w, h) / 2; // ::before covers the padding box, so radius and size are inner ones
+    o.radius = Math.max(0, Math.min(half, (br.endsWith('%') ? parseFloat(br) / 100 * Math.min(el.offsetWidth, el.offsetHeight) : parseFloat(br) || 0) - b));
+    if (o.bezel === 'auto') o.bezel = Math.max(10, o.radius * 0.8);
+    o.bezel = Math.min(half, o.bezel);
+    if (o.thickness === 'auto') o.thickness = o.bezel * 1.2;
+    if (o.zoom !== 1 !== zoomed) {
+      zoomed = o.zoom !== 1;
+      filter.innerHTML = FILTER(zoomed);
+      for (const n of filter.querySelectorAll('[result]')) fe[n.getAttribute('result')] = n;
+      fe.slope = filter.querySelector('feFuncA');
+      key = null;
+    }
+    const res = Math.min(1, Math.max(.5, 16 / o.bezel)); // ~16 samples across the bezel is plenty
+    const k = [w, h, res, o.radius, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom].join();
+    const m = mapsFor(k, () => {
+      const r = computeMaps(w, h, o, res);
+      return { d: toURL(r.dmap, r.W, r.H), z: r.zmap && toURL(r.zmap, r.ZW, r.ZH), scale: r.scale, zscale: r.zscale };
+    });
+    if (k !== key) {
+      key = k;
+      for (const [img, url] of [[fe.map, m.d], [fe.zmap, m.z]]) {
+        if (!img) continue;
+        for (const [a, v] of [['x', 0], ['y', 0], ['width', w], ['height', h], ['href', url]]) img.setAttribute(a, v);
+      }
+    }
+    fe.zoomed?.setAttribute('scale', m.zscale);
+    // feDisplacementMap picks the nearest source pixel, so magnified content steps; a blur sized to the
+    // magnification (in device px) smooths it like bilinear sampling would. Folded into the frost blur.
+    // a zoom-wide pixel step needs σ ≈ 0.45 × zoom; Skia's CPU blur ignores σ under ~0.8 device px
+    const aa = o.zoom > 1 ? Math.max(.8, .45 * o.zoom) / (devicePixelRatio || 1) : 0;
+    fe.blur.setAttribute('stdDeviation', Math.hypot(o.blur, aa));
+    fe.refracted.setAttribute('scale', m.scale * o.refraction);
+    fe.saturated.setAttribute('values', o.saturation);
+    fe.slope.setAttribute('slope', o.specular);
+    show();
+  };
+
+  const ro = new ResizeObserver(render);
+  ro.observe(el, { box: 'border-box' });
+  onScreen?.observe(el);
+  return el.glass = {
+    filter, // the <filter> element, for inspection or extra primitives
+    update(o) { Object.assign(opts, o); render() },
+    show(v) { shown = v; show() },
+    destroy() { ro.disconnect(); onScreen?.unobserve(el); filter.remove(); el.style.removeProperty('--lg-filter'); delete el.glass },
+  };
+}
+
+// ---------------------------------------------------------------- components
+
+const Base = globalThis.HTMLElement ?? class {}; // lets Node import the math for tests
+
+// Native inputs do the work (forms, keyboard, labels, a11y); host attributes are copied onto them.
+function build(host, html) {
+  host.innerHTML = html;
+  const input = host.querySelector('input');
+  for (const a of host.getAttributeNames()) if (!['class', 'style', 'id'].includes(a)) input.setAttribute(a, host.getAttribute(a));
+  return input;
+}
+
+// Horizontal drag: move(e) once past 4px, end(e, dragged) on release or cancel. A touch drag fires no
+// click afterwards and a mouse drag does, so callers act in end() and swallowClick() the leftover.
+function onDrag(host, move, end) {
+  host.addEventListener('pointerdown', e => {
+    if (e.button || host.querySelector(':disabled')) return;
+    const t = e.target, x0 = e.clientX;
+    let dragged = false;
+    t.setPointerCapture(e.pointerId); // on the pressed element, so a plain tap still clicks it
+    const mv = ev => (dragged ||= Math.abs(ev.clientX - x0) > 4) && move(ev);
+    const up = ev => {
+      for (const [type, fn] of [['pointermove', mv], ['pointerup', up], ['pointercancel', up]]) t.removeEventListener(type, fn);
+      end(ev, dragged);
+    };
+    for (const [type, fn] of [['pointermove', mv], ['pointerup', up], ['pointercancel', up]]) t.addEventListener(type, fn);
+  });
+}
+
+// Mouse click follows pointerup in the same task; the timeout disarms before any later click.
+function swallowClick(el) {
+  const eat = e => { e.preventDefault(); e.stopImmediatePropagation() };
+  el.addEventListener('click', eat, true);
+  setTimeout(() => el.removeEventListener('click', eat, true));
+}
+
+// Squash & stretch from horizontal speed, relaxing once movement stops. Feed it pointer x.
+function jelly(el) {
+  let s = 0, x0, t0, raf = 0;
+  const tick = () => {
+    s *= 0.82;
+    el.style.transform = s > .004 ? `scale(${1 + s}, ${1 - s / 2})` : '';
+    raf = s > .004 ? requestAnimationFrame(tick) : 0;
+  };
+  return x => {
+    const t = performance.now();
+    if (t > t0) s = Math.min(.22, Math.max(s, Math.abs(x - x0) / (t - t0) * .05));
+    x0 = x; t0 = t;
+    raf ||= requestAnimationFrame(tick);
+  };
+}
+
+class LgSwitch extends Base {
+  connectedCallback() {
+    if (this.input) return;
+    this.input = build(this, '<input type="checkbox" role="switch"><span class="lg-thumb" data-glass></span>');
+    const squish = jelly(this.querySelector('.lg-thumb'));
+    let f = 0;
+    onDrag(this, e => {
+      const r = this.getBoundingClientRect();
+      f = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width - 1 / 3) * 3)); // thumb centre runs from 1/3 to 2/3
+      this.style.setProperty('--lg-f', f);
+      this.toggleAttribute('data-dragging', true);
+      squish(e.clientX);
+    }, (e, dragged) => {
+      this.removeAttribute('data-dragging');
+      this.style.removeProperty('--lg-f');
+      if (!dragged || e.type !== 'pointerup') return;
+      if (f > .5 !== this.input.checked) this.input.click(); // native toggle, fires input + change
+      swallowClick(this);
+    });
+  }
+  get checked() { return this.input.checked }
+  set checked(v) { this.input.checked = v }
+}
+
+class LgSlider extends Base {
+  connectedCallback() {
+    if (this.input) return;
+    this.input = build(this, '<input type="range"><span class="lg-track"><span class="lg-fill"></span></span><span class="lg-thumb" data-glass></span>');
+    const squish = jelly(this.querySelector('.lg-thumb'));
+    this.input.addEventListener('input', () => squish(this.sync() * this.offsetWidth));
+    this.sync();
+  }
+  sync() {
+    const i = this.input, min = +i.min || 0, max = i.max === '' ? 100 : +i.max, p = (i.value - min) / (max - min);
+    this.style.setProperty('--p', p);
+    return p;
+  }
+  get value() { return this.input.value }
+  set value(v) { this.input.value = v; this.sync() }
+}
+
+// Children (buttons or links) become equal-width segments with a glass indicator you can tap or drag.
+class LgSegmented extends Base {
+  get items() { return [...this.children].filter(c => c !== this.ind) }
+  connectedCallback() {
+    if (this.ind) return;
+    this.ind = this.appendChild(document.createElement('span'));
+    this.ind.className = 'lg-indicator';
+    this.ind.dataset.glass = '';
+    if (this.items[0]?.tagName !== 'A') this.role = 'tablist';
+    this.addEventListener('click', e => { const i = this.items.findIndex(c => c.contains(e.target)); if (i >= 0) this.select(i, true) });
+    this.addEventListener('keydown', e => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (!d || this.role !== 'tablist') return;
+      e.preventDefault();
+      this.select(this.index + d, true);
+      this.items[this.index].focus();
+    });
+    // the lens sinks back under the labels once it has arrived
+    this.ind.addEventListener('transitionend', e => e.propertyName === 'translate' && this.settle());
+    const squish = jelly(this.ind);
+    let f = 0;
+    onDrag(this, e => {
+      const r = this.getBoundingClientRect(), pad = parseFloat(getComputedStyle(this).paddingLeft), n = this.items.length;
+      f = Math.max(0, Math.min(n - 1, (e.clientX - r.left - pad) / (r.width - 2 * pad) * n - .5));
+      this.style.setProperty('--i', f);
+      this.toggleAttribute('data-dragging', true);
+      this.toggleAttribute('data-moving', true);
+      squish(e.clientX);
+    }, (e, dragged) => {
+      if (!dragged) return;
+      this.removeAttribute('data-dragging');
+      if (e.type !== 'pointerup') return this.select(this.index); // cancelled: glide back
+      this.items[Math.round(f)].click(); // same path as a tap: selects, follows links, runs your handlers
+      swallowClick(this);
+    });
+    this.select(Math.max(0, this.items.findIndex(c => c.matches('[aria-current=page],[aria-selected=true]'))));
+  }
+  settle() { if (!this.hasAttribute('data-dragging')) this.removeAttribute('data-moving') }
+  select(i, fromUser) {
+    const items = this.items;
+    i = Math.max(0, Math.min(items.length - 1, i));
+    items.forEach((c, j) => {
+      if (c.tagName === 'A') { j === i ? c.setAttribute('aria-current', 'page') : c.removeAttribute('aria-current'); return }
+      c.role = 'tab'; c.ariaSelected = j === i; c.tabIndex = j === i ? 0 : -1;
+    });
+    this.style.setProperty('--n', items.length);
+    this.style.setProperty('--i', i);
+    if (this.index != null && i !== this.index) {
+      this.toggleAttribute('data-moving', true); // indicator swells into a lens while it travels
+      if (fromUser) this.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    clearTimeout(this.t);
+    this.t = setTimeout(() => this.settle(), 700); // in case no translate transition runs
+    this.index = i;
+  }
+  get value() { return this.index }
+  set value(i) { this.select(i) }
+}
+
+const CSS = `
+${Object.keys(DEFAULTS).map(k => `@property --lg-${k} { syntax: '*'; inherits: false; }`).join('\n')}
+@property --lg-f { syntax: '<number>'; inherits: true; initial-value: 0; }
+@layer liquid-glass {
+:root {
+  --lg-accent: #0a84ff;
+  --lg-green: #34c759;
+  --lg-tint: light-dark(rgb(255 255 255 / .16), rgb(255 255 255 / .05));
+  --lg-shadow: 0 6px 24px rgb(0 0 0 / .16);
+  /* damped springs: --lg-spring (ζ .55, ~.5s) for presses, --lg-glide (ζ .72, ~.4s) for travel */
+  --lg-spring: linear(0, .094, .307, .553, .776, .947, 1.057, 1.113, 1.126, 1.112, 1.085, 1.054, 1.026, 1.005, .992, .985, .984, .986, .99, .994, 1);
+  --lg-glide: linear(0, .042, .143, .275, .415, .55, .672, .775, .858, .922, .969, 1.001, 1.022, 1.033, 1.038, 1.038, 1.035, 1.03, 1.025, 1.02, 1.015, 1.01, 1.007, 1.004, 1);
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root:has(lg-segmented a[href^="#"]) { scroll-behavior: smooth; } /* in-page nav glides instead of jumping */
+}
+:where([data-glass]) { position: relative; isolation: isolate; background-color: var(--lg-tint); box-shadow: var(--lg-shadow); }
+[data-glass]::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  backdrop-filter: var(--lg-filter);
+}
+
+.lg-btn {
+  font: inherit; color: inherit; border: 0; cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: .5em;
+  min-height: 2.75em; padding: 0 1.25em; border-radius: 999px;
+  transition: scale .5s var(--lg-spring), background-color .2s;
+  &:hover { background-color: light-dark(rgb(255 255 255 / .3), rgb(255 255 255 / .12)); }
+  &:active { scale: 1.08; }
+  &:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
+  &.lg-round { width: 2.75em; padding: 0; }
+  &.lg-tinted { background-color: color-mix(in srgb, var(--lg-accent) 75%, transparent); color: #fff; }
+  & svg { width: 1.25em; height: 1.25em; }
+}
+
+.lg-field {
+  display: flex; align-items: center; gap: .6em; height: 2.75em; padding: 0 1.1em; border-radius: 999px; cursor: text;
+  transition: background-color .25s, outline-color .25s; outline: 1px solid transparent;
+  &:focus-within { --lg-tint: light-dark(rgb(255 255 255 / .4), rgb(255 255 255 / .12)); outline-color: light-dark(rgb(0 0 0 / .12), rgb(255 255 255 / .3)); }
+  & input { all: unset; flex: 1; min-width: 0; }
+  & svg { width: 1.1em; height: 1.1em; opacity: .6; flex: none; }
+}
+
+.lg-panel { border-radius: 1.5em; padding: 1.25em; }
+
+.lg-menu {
+  position: fixed; inset: auto; margin: .5em 0 0; position-area: block-end span-inline-end; position-try-fallbacks: flip-block, flip-inline;
+  border: 0; padding: .35em; border-radius: 1.25em; min-width: 12em;
+  --lg-blur: 5; --lg-tint: light-dark(rgb(250 250 252 / .62), rgb(30 31 35 / .62)); color: light-dark(#111, #f4f4f5);
+  /* no opacity fade (opacity < 1 blanks the glass), so it closes by shrinking fast into its corner */
+  transform-origin: top left; scale: .05;
+  transition: scale .2s cubic-bezier(.4, 0, 1, 1), display .2s allow-discrete, overlay .2s allow-discrete;
+  &:popover-open { display: grid; scale: 1; transition: scale .5s var(--lg-spring), display .5s allow-discrete, overlay .5s allow-discrete; }
+  @starting-style { &:popover-open { scale: .3; } }
+  & > button, & > a { all: unset; padding: .55em .85em; border-radius: .9em; cursor: default; }
+  & > :is(button, a):is(:hover, :focus-visible) { background: rgb(127 127 127 / .2); }
+  & > hr { border: 0; border-top: 1px solid rgb(127 127 127 / .25); margin: .3em .6em; }
+}
+
+lg-switch {
+  --lg-f: 0; /* 0 = off, 1 = on; follows the finger while dragging */
+  position: relative; display: inline-block; vertical-align: middle; flex: none; touch-action: pan-y; user-select: none;
+  width: 4em; height: 1.75em; border-radius: 1em;
+  background: color-mix(in srgb, var(--lg-green) calc(clamp(0, var(--lg-f), 1) * 100%), light-dark(rgb(120 120 128 / .22), rgb(120 120 128 / .4)));
+  transition: --lg-f .5s var(--lg-spring);
+  &:has(:checked) { --lg-f: 1; }
+  &[data-dragging] { transition: none; }
+  &:has(:focus-visible) { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
+  &:has(:disabled) { filter: grayscale(1) opacity(.5); }
+  & input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+  & .lg-thumb {
+    --lg-profile: lip; --lg-specular: .6;
+    position: absolute; top: 50%; left: calc(1.34em + (100% - 2.68em) * var(--lg-f)); width: 3.9em; height: 2.4em; border-radius: 1.2em;
+    translate: -50% -50%; scale: .62; background: #fff; box-shadow: 0 .1em .5em rgb(0 0 0 / .2); pointer-events: none;
+    transition: scale .5s var(--lg-spring), background-color .2s;
+  }
+  &:has(input:active) .lg-thumb { scale: 1; background: rgb(255 255 255 / .06); }
+  & .lg-thumb::before { opacity: 0; transition: opacity .2s; } /* solid white at rest, glass while pressed */
+  &:has(input:active) .lg-thumb::before { opacity: 1; }
+}
+
+lg-slider {
+  --p: .5; position: relative; display: block; height: 2.6em; min-width: 8em; user-select: none;
+  &:has(:disabled) { filter: grayscale(1) opacity(.5); }
+  & input {
+    position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; appearance: none;
+    &::-webkit-slider-thumb { appearance: none; width: 2.4em; height: 2.6em; }
+  }
+  &:has(:focus-visible) .lg-thumb { outline: 2px solid var(--lg-accent); outline-offset: 3px; }
+  & .lg-track {
+    position: absolute; inset: 50% 0 auto; height: .45em; translate: 0 -50%; border-radius: 1em; overflow: hidden;
+    background: light-dark(rgb(120 120 128 / .22), rgb(120 120 128 / .4)); pointer-events: none;
+  }
+  & .lg-fill { height: 100%; width: calc(var(--p) * (100% - 2.4em) + 1.2em); background: var(--lg-accent); }
+  & .lg-thumb {
+    --lg-specular: .6;
+    position: absolute; top: 50%; left: calc(var(--p) * (100% - 2.4em) + 1.2em); width: 4em; height: 2.6em; border-radius: 1.3em;
+    translate: -50% -50%; scale: .6; background: #fff; box-shadow: 0 .1em .5em rgb(0 0 0 / .2); pointer-events: none;
+    transition: scale .5s var(--lg-spring), background-color .2s;
+  }
+  &:has(input:active) .lg-thumb { scale: 1; background: rgb(255 255 255 / .06); }
+  & .lg-thumb::before { opacity: 0; transition: opacity .2s; }
+  &:has(input:active) .lg-thumb::before { opacity: 1; }
+}
+
+lg-segmented {
+  /* minmax(0, 1fr): truly equal columns, or long labels widen theirs and the indicator drifts off-centre */
+  --n: 1; --i: 0; position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+  padding: .25em; border-radius: 999px; touch-action: pan-y; user-select: none;
+  & > :not(.lg-indicator) {
+    all: unset; -webkit-user-drag: none; display: flex; align-items: center; justify-content: center; gap: .35em;
+    position: relative; z-index: 1; padding: .55em 1.1em; border-radius: 999px; cursor: pointer; white-space: nowrap; transition: color .2s;
+    &:is([aria-selected=true], [aria-current]) { color: var(--lg-accent); }
+    &:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: -2px; }
+  }
+  & .lg-indicator {
+    --lg-refraction: 1.4; --lg-blur: 0; /* labels stay sharp under the lens */
+    position: absolute; inset: .25em auto .25em .25em; width: calc((100% - .5em) / var(--n)); border-radius: 999px;
+    translate: calc(var(--i) * 100%) 0; pointer-events: none; z-index: 0;
+    background: light-dark(rgb(0 0 0 / .07), rgb(255 255 255 / .12)); box-shadow: none;
+    /* leaving the lens state: shrink first, sink under the labels once mostly shrunk */
+    transition: translate .4s var(--lg-glide), scale .5s var(--lg-spring), background-color .25s, z-index 0s .22s;
+  }
+  &[data-moving] .lg-indicator { /* lens over the labels only while travelling or dragged */
+    z-index: 2; scale: 1.12 1.3; background: rgb(255 255 255 / .04);
+    transition: translate .4s var(--lg-glide), scale .35s var(--lg-spring), background-color .15s, z-index 0s;
+  }
+  &[data-dragging] .lg-indicator { transition: scale .35s var(--lg-spring), background-color .15s, z-index 0s; }
+  &.lg-tabbar > :not(.lg-indicator) { flex-direction: column; gap: .15em; padding: .45em 1.2em; font-size: .72em; font-weight: 500; }
+  &.lg-tabbar svg { width: 2em; height: 2em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lg-btn, .lg-menu, lg-switch, lg-switch *, lg-slider *, lg-segmented * { transition-duration: 0s !important; }
+}
+}`;
+
+if (globalThis.document) {
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(CSS);
+  document.adoptedStyleSheets.push(sheet);
+  customElements.define('lg-switch', LgSwitch);
+  customElements.define('lg-slider', LgSlider);
+  customElements.define('lg-segmented', LgSegmented);
+
+  const scan = (node, fn) => {
+    if (node.nodeType !== 1) return;
+    if (node.matches('[data-glass]')) fn(node);
+    node.querySelectorAll('[data-glass]').forEach(fn);
+  };
+  new MutationObserver(records => {
+    for (const r of records) {
+      if (r.type === 'attributes') r.target.hasAttribute('data-glass') ? glass(r.target) : r.target.glass?.destroy();
+      r.removedNodes.forEach(n => scan(n, el => el.glass?.destroy()));
+      r.addedNodes.forEach(n => n.isConnected && scan(n, el => glass(el)));
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-glass'] });
+  scan(document.documentElement, el => glass(el));
+  document.addEventListener('click', e => e.target.closest?.('.lg-menu > :is(button, a)')?.parentElement.hidePopover());
+}
+
+// ---- demo ----
+const $ = s => document.querySelector(s);
+
+// Test charts: Siemens star, USAF-1951-style bar groups, a 24-patch colour checker, a grey wedge, a grating.
+const PATCHES = ['#735244','#c29682','#627a9d','#576c43','#8580b1','#67bdaa','#d67e2c','#505ba6','#c15a63','#5e3c6c','#9dbc40','#e0a32e',
+  '#383d96','#469449','#af363c','#e7c71f','#bb5695','#0885a1','#f3f3f2','#c8c8c8','#a0a0a0','#7a7a79','#555555','#343434'];
+function chart(dark) {
+  const W = 1280, H = 820, c = document.createElement('canvas'), x = c.getContext('2d');
+  c.width = W * 2; c.height = H * 2; x.scale(2, 2);
+  const ink = dark ? '#f1f2ee' : '#131416'; // transparent canvas: the stage paints paper and grid
+  x.fillStyle = ink;
+  const [cx, cy, R] = [720, 300, 180];
+  for (let k = 0; k < 36; k++) { const a = k / 18 * Math.PI; x.beginPath(); x.moveTo(cx, cy); x.arc(cx, cy, R, a, a + Math.PI / 36); x.closePath(); x.fill(); }
+  x.strokeStyle = ink; x.lineWidth = 2; x.beginPath(); x.arc(cx, cy, R + 10, 0, Math.PI * 2); x.stroke();
+  x.font = '500 11px ui-monospace, Menlo, monospace';
+  let s = 11, bx = 560, by = 540;
+  for (let g = 0; g < 10; g++) {
+    if (g === 5) { bx = 760; by = 540; }
+    for (let b = 0; b < 3; b++) { x.fillRect(bx + b * 2 * s, by, s, 5 * s); x.fillRect(bx + 6 * s, by + b * 2 * s, 5 * s, s); }
+    x.fillText(`${(g / 5 | 0) - 1} · ${g % 5 + 1}`, bx + 12 * s, by + 3 * s);
+    by += 5 * s + 14; s *= 2 ** (-1 / 6);
+  }
+  const px = 940, py = 120, p = 48, gap = 8;
+  x.fillStyle = '#1b1b1b'; x.beginPath(); x.roundRect(px - 12, py - 12, 6 * p + 5 * gap + 24, 4 * p + 3 * gap + 24, 10); x.fill();
+  PATCHES.forEach((col, i) => { x.fillStyle = col; x.beginPath(); x.roundRect(px + i % 6 * (p + gap), py + (i / 6 | 0) * (p + gap), p, p, 4); x.fill(); });
+  for (let i = 0; i < 11; i++) { const v = Math.round(255 * i / 10); x.fillStyle = `rgb(${v} ${v} ${v})`; x.fillRect(px - 12 + i * 32, 380, 32, 40); }
+  for (let i = 0; i < 44; i++) { x.fillStyle = ink; x.fillRect(px + i * 8 * (1 - i / 120), 470, 4 * (1 - i / 120), 120); }
+  const spec = x.createLinearGradient(40, 0, 500, 0); // visible spectrum, 380 → 700 nm
+  ['#61007d', '#3b2bff', '#0090ff', '#00d5b0', '#43e000', '#d8f000', '#ffbe00', '#ff5a00', '#e8001c', '#8c0010']
+    .forEach((col, i, a) => spec.addColorStop(i / (a.length - 1), col));
+  x.fillStyle = spec; x.fillRect(40, 640, 460, 120);
+  x.fillStyle = ink; x.font = '500 12px ui-monospace, Menlo, monospace';
+  x.fillText('SPECTRUM · 380 → 700 NM', 40, 784);
+  x.fillStyle = ink; x.font = '800 72px Archivo, Helvetica, Arial, sans-serif';
+  x.fillText('n = 1.50', px - 12, 720);
+  x.font = '500 12px ui-monospace, Menlo, monospace';
+  x.fillText('SIEMENS STAR · 36 CYCLES', cx - 84, cy + R + 30);
+  x.fillText('COLORCHECKER 24 · D50', px - 12, py - 22);
+  x.fillText('GRATING 4 → 3 LP/MM', px, 614);
+  return c.toDataURL();
+}
+document.fonts.load('800 72px Archivo').finally(() => {
+  document.documentElement.style.setProperty('--chart-dark', `url(${chart(true)})`);
+  document.documentElement.style.setProperty('--chart-light', `url(${chart(false)})`);
+});
+
+// Theme toggle
+$('#theme').addEventListener('click', () => {
+  const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+});
+
+// Filter cards from the top bar search
+$('#q').addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  for (const card of document.querySelectorAll('.card')) card.hidden = !!q && !card.querySelector('h3').textContent.toLowerCase().includes(q);
+  if (q) $('#components').scrollIntoView({ behavior: 'smooth' });
+});
+
+// Draggable lens
+const lens = $('#lens');
+lens.addEventListener('pointerdown', e => {
+  lens.setPointerCapture(e.pointerId);
+  const bench = $('#bench').getBoundingClientRect(), r = lens.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
+  const move = ev => {
+    lens.style.left = Math.max(0, Math.min(bench.width - r.width, ev.clientX - bench.left - ox)) + 'px';
+    lens.style.top = Math.max(0, Math.min(bench.height - r.height, ev.clientY - bench.top - oy)) + 'px';
+    lens.style.right = 'auto';
+  };
+  lens.addEventListener('pointermove', move);
+  lens.addEventListener('lostpointercapture', () => lens.removeEventListener('pointermove', move), { once: true });
+});
+
+// Bench controls
+const allGlass = () => document.querySelectorAll('[data-glass]');
+$('#cRefr').addEventListener('change', e => allGlass().forEach(el => el.glass?.update({ refraction: e.target.checked ? undefined : 0 })));
+$('#cSpec').addEventListener('change', e => allGlass().forEach(el => el.glass?.update({ specular: e.target.checked ? undefined : 0 })));
+$('#cZoom').addEventListener('input', e => { lens.glass.update({ zoom: +e.target.value }); $('#cZoomOut').value = (+e.target.value).toFixed(2) + '×'; });
+$('#cProfile').addEventListener('change', e => lens.glass.update({ profile: e.currentTarget.items[e.currentTarget.value].textContent.toLowerCase() }));
+
+// Playground
+const pg = $('#pg');
+const spec = [
+  ['width', 80, 640, 1, 360], ['height', 60, 420, 1, 230], ['radius', 0, 210, 1, 56],
+  ['bezel', 2, 120, 1, 40], ['thickness', 0, 200, 1, 52], ['ior', 1, 2.4, .01, 1.5],
+  ['refraction', 0, 3, .05, 1], ['blur', 0, 8, .1, 1], ['saturation', 0, 12, .5, 5],
+  ['specular', 0, 1, .01, .7], ['light', 0, 360, 1, 225], ['zoom', .5, 3, .05, 1],
+];
+$('#pgSide .map').insertAdjacentHTML('beforebegin', spec.map(([k, min, max, step, v]) =>
+  `<label class="pg-row"><span>${k}</span><lg-slider id="pg-${k}" min="${min}" max="${max}" step="${step}" value="${v}"></lg-slider><output>${v}</output></label>`).join(''));
+const geom = { width: 'width', height: 'height', radius: 'border-radius' };
+function applyPg() {
+  const css = [];
+  for (const [k] of spec) {
+    const v = $(`#pg-${k}`).value;
+    $(`#pg-${k}`).nextElementSibling.value = v;
+    if (geom[k]) { pg.style.setProperty(geom[k], v + 'px'); css.push(`${geom[k]}: ${v}px;`); }
+    else { pg.style.setProperty('--lg-' + k, v); css.push(`--lg-${k}: ${v};`); }
+  }
+  const profile = $('#pgProfile').items[$('#pgProfile').value ?? 0].textContent;
+  pg.style.setProperty('--lg-profile', profile);
+  css.splice(3, 0, `--lg-profile: ${profile};`);
+  $('#pgCss').textContent = `.my-glass {\n  ${css.join('\n  ')}\n}`;
+  pg.glass?.update();
+  requestAnimationFrame(() => {
+    $('#mapD').src = pg.glass.filter.querySelector('[result=map]').getAttribute('href');
+  });
+}
+$('#pgSide').addEventListener('input', applyPg);
+$('#pgProfile').addEventListener('change', applyPg);
+glass(pg);
+applyPg();
+
+// Dock follows the scroll position
+const dock = $('.dock'), ids = ['bench', 'components', 'playground', 'api'];
+let gliding = 0; // pause the spy while a dock click scrolls past other sections; clears 150ms after scrolling stops
+const hold = () => { clearTimeout(gliding); gliding = setTimeout(() => gliding = 0, 150); };
+dock.addEventListener('click', hold);
+addEventListener('scroll', () => gliding && hold(), { passive: true });
+const io = new IntersectionObserver(entries => gliding || entries.forEach(en => en.isIntersecting && dock.select(ids.indexOf(en.target.id))), { rootMargin: '-45% 0px -50% 0px' });
+ids.forEach(id => io.observe(document.getElementById(id)));
+</script>
+
+</html>
