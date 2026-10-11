@@ -32,4 +32,18 @@ assert(
 const r = computeMaps(101, 60, o, 0.5); // odd size: map centres must still span the element exactly
 assert.deepEqual([r.W, r.dmap[((30 >> 1) * r.W + 25) * 4]], [51, 128], 'low-res map stays centred');
 
+// two 40px circles 10px apart: separate without merge, bridged with it
+const blobs = [
+  { x: 0, y: 0, w: 40, h: 40, r: 20 },
+  { x: 50, y: 0, w: 40, h: 40, r: 20 },
+];
+const alpha = (m, x, y) => m.dmap[(y * m.W + x) * 4 + 3];
+const apart = computeMaps(90, 40, o, 1, blobs),
+  merged = computeMaps(90, 40, { ...o, merge: 24 }, 1, blobs);
+assert(
+  alpha(apart, 20, 20) === 255 && alpha(apart, 45, 20) === 0 && alpha(apart, 0, 0) === 0,
+  'shapes cut the glass out',
+);
+assert(alpha(merged, 45, 20) === 255 && alpha(merged, 45, 2) === 0, 'merge bridges the gap at the waist only');
+
 console.log('ok, max displacement', scale.toFixed(1), 'px');

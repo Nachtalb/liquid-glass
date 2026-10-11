@@ -10,6 +10,7 @@
 //   --lg-profile squircle|circle|concave|lip   --lg-bezel px   --lg-thickness px   --lg-ior
 //   --lg-refraction 0..n   --lg-blur px   --lg-saturation   --lg-specular 0..1   --lg-light deg
 //   --lg-zoom (>1 magnifies)   --lg-antialias (smoothing of zoomed pixels, 1 = auto, 0 = off)
+//   --lg-merge px (<lg-merge>: how close its children's glass starts to melt together)
 // Values are read when the element is first glassed and on every resize. Call el.glass.update() after changing them.
 //
 // The backdrop-filter lives on the element's ::before (inset: 0, z-index: -1), not on the element itself:
@@ -29,6 +30,7 @@ const DEFAULTS = {
   light: 225,
   zoom: 1,
   antialias: 1,
+  merge: 20,
 };
 
 const smootherstep = t => t * t * t * (t * (t * 6 - 15) + 10);
@@ -62,10 +64,25 @@ export function bezelDisplacement(f, bezel, thickness, ior, n = 128) {
   return out;
 }
 
+// Signed distance (px, < 0 inside) to a rounded rect { x, y, w, h, r } given in element px.
+const sdRect = (px, py, s) => {
+  const qx = Math.abs(px - s.x - s.w / 2) - s.w / 2 + s.r,
+    qy = Math.abs(py - s.y - s.h / 2) - s.h / 2 + s.r;
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - s.r;
+};
+
 // RGBA map for a rounded rect: R = x and G = y displacement (128 = none), B = rim light, A = 255.
+// With shapes (rounded rects) it maps their smooth union instead, blended over `merge` px so close shapes
+// melt into one; A then holds the shape's coverage, which the filter uses to cut the glass out.
 // Plus a magnifier map if zoom ≠ 1. scale/zscale are the matching feDisplacementMap scales.
 // res < 1 renders the maps smaller; feImage stretches them back (the fields are smooth).
-export function computeMaps(w, h, { radius: r, bezel, thickness, profile, ior, light, zoom }, res = 1) {
+export function computeMaps(
+  w,
+  h,
+  { radius: r, bezel, thickness, profile, ior, light, zoom, merge = 0 },
+  res = 1,
+  shapes,
+) {
   const W = Math.ceil(w * res),
     H = Math.ceil(h * res),
     n = 128;
@@ -77,30 +94,51 @@ export function computeMaps(w, h, { radius: r, bezel, thickness, profile, ior, l
   const max = Math.abs(disp[peak]) || 1;
   const lx = Math.cos((light * Math.PI) / 180),
     ly = Math.sin((light * Math.PI) / 180);
+  const k = merge || 1e-6,
+    sdf = (px, py) =>
+      shapes.reduce((d, s) => {
+        const b = sdRect(px, py, s),
+          m = Math.max(k - Math.abs(d - b), 0) / k;
+        return Math.min(d, b) - (m * m * k) / 4; // polynomial smooth min
+      }, Infinity);
   const dmap = new Uint8ClampedArray(W * H * 4);
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const px = ((x + 0.5) * w) / W - w / 2,
         py = ((y + 0.5) * h) / H - h / 2; // feImage stretches W×H onto w×h
-      const qx = Math.abs(px) - w / 2 + r,
-        qy = Math.abs(py) - h / 2 + r;
       let e,
         nx = 0,
-        ny = 0; // e: distance inside the edge, (nx, ny): outward edge normal
-      if (qx > 0 && qy > 0) {
-        const l = Math.hypot(qx, qy);
-        e = r - l;
-        nx = qx / l;
-        ny = qy / l;
-      } else if (qx > qy) {
-        e = r - qx;
-        nx = 1;
+        ny = 0, // e: distance inside the edge, (nx, ny): outward edge normal
+        a = 255;
+      if (shapes) {
+        const X = px + w / 2,
+          Y = py + h / 2,
+          d = sdf(X, Y),
+          gx = sdf(X + 0.5, Y) - d, // forward differences: the normal only steers the bend
+          gy = sdf(X, Y + 0.5) - d,
+          gl = Math.hypot(gx, gy) || 1;
+        e = -d;
+        nx = gx / gl;
+        ny = gy / gl;
+        a = Math.min(1, Math.max(0, 0.5 - (d * W) / w)) * 255; // edge antialiased over one map pixel
       } else {
-        e = r - qy;
-        ny = 1;
+        const qx = Math.abs(px) - w / 2 + r,
+          qy = Math.abs(py) - h / 2 + r;
+        if (qx > 0 && qy > 0) {
+          const l = Math.hypot(qx, qy);
+          e = r - l;
+          nx = qx / l;
+          ny = qy / l;
+        } else if (qx > qy) {
+          e = r - qx;
+          nx = 1;
+        } else {
+          e = r - qy;
+          ny = 1;
+        }
+        nx *= Math.sign(px) || 1;
+        ny *= Math.sign(py) || 1;
       }
-      nx *= Math.sign(px) || 1;
-      ny *= Math.sign(py) || 1;
       let dx = 0,
         dy = 0,
         s = 0;
@@ -116,7 +154,7 @@ export function computeMaps(w, h, { radius: r, bezel, thickness, profile, ior, l
       dmap[i] = 128 + (dx / max) * 127;
       dmap[i + 1] = 128 + (dy / max) * 127;
       dmap[i + 2] = s * 255;
-      dmap[i + 3] = 255;
+      dmap[i + 3] = a;
     }
   // Magnifier: sample towards the centre. The field is linear and feImage upscaling interpolates it
   // exactly, so ≤32px is plenty. Per-axis range (not the diagonal) keeps the 8-bit steps finer.
@@ -142,7 +180,8 @@ export function computeMaps(w, h, { radius: r, bezel, thickness, profile, ior, l
 const NS = 'http://www.w3.org/2000/svg';
 // Chromium re-sends a reference filter, feImage pixels included, with every compositor frame,
 // so the chain carries one small map and skips the zoom stage unless it is used.
-const FILTER = zoom => `${
+// shaped: the map's alpha holds the shape, and the last step cuts the glass to it.
+const FILTER = (zoom, shaped) => `${
   zoom
     ? `
 <feImage preserveAspectRatio="none" result="zmap"/>
@@ -157,7 +196,7 @@ const FILTER = zoom => `${
 <feComposite in="saturated" in2="rimlight" operator="in" result="rim"/>
 <feComponentTransfer in="rimlight" result="highlight"><feFuncA type="linear"/></feComponentTransfer>
 <feBlend in="rim" in2="refracted" result="rimmed"/>
-<feBlend in="highlight" in2="rimmed"/>`;
+<feBlend in="highlight" in2="rimmed"${shaped ? ' result="lit"/>\n<feComposite in="lit" in2="map" operator="in"/>' : '/>'}`;
 
 let uid = 0,
   svg;
@@ -228,31 +267,49 @@ export function glass(el, opts = {}) {
       br = cs.borderTopLeftRadius;
     const w = el.offsetWidth - b - parseFloat(cs.borderRightWidth),
       h = el.offsetHeight - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth);
-    if (w <= 0 || h <= 0) return;
-    const half = Math.min(w, h) / 2; // ::before covers the padding box, so radius and size are inner ones
-    o.radius = Math.max(
-      0,
-      Math.min(
-        half,
-        (br.endsWith('%') ? (parseFloat(br) / 100) * Math.min(el.offsetWidth, el.offsetHeight) : parseFloat(br) || 0) -
-          b,
-      ),
-    );
+    const shapes = opts.shapes?.(); // [{ x, y, w, h, r }] in element px: glass cut to their smooth union
+    if (w <= 0 || h <= 0 || shapes?.length === 0) return;
+    const half = shapes ? Math.min(...shapes.map(s => Math.min(s.w, s.h) / 2)) : Math.min(w, h) / 2; // ::before covers the padding box, so radius and size are inner ones
+    o.radius = shapes
+      ? Math.min(...shapes.map(s => s.r))
+      : Math.max(
+          0,
+          Math.min(
+            half,
+            (br.endsWith('%')
+              ? (parseFloat(br) / 100) * Math.min(el.offsetWidth, el.offsetHeight)
+              : parseFloat(br) || 0) - b,
+          ),
+        );
     if (o.bezel === 'auto') o.bezel = Math.max(10, o.radius * 0.8);
     o.bezel = Math.min(half, o.bezel);
     if (o.thickness === 'auto') o.thickness = o.bezel * 1.2;
     const z = o.zoom !== 1;
     if (z !== zoomed) {
       zoomed = z;
-      filter.innerHTML = FILTER(zoomed);
+      filter.innerHTML = FILTER(zoomed, !!shapes);
       for (const n of filter.querySelectorAll('[result]')) fe[n.getAttribute('result')] = n;
       fe.slope = filter.querySelector('feFuncA');
       key = null;
     }
-    const res = Math.min(1, Math.max(0.5, 16 / o.bezel)); // ~16 samples across the bezel is plenty
-    const k = [w, h, res, o.radius, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom].join();
+    // ~16 samples across the bezel is plenty; shapes re-render while they move, so they always go half size
+    const res = shapes ? 0.5 : Math.min(1, Math.max(0.5, 16 / o.bezel));
+    const k = [
+      w,
+      h,
+      res,
+      o.radius,
+      o.bezel,
+      o.thickness,
+      o.profile,
+      o.ior,
+      o.light,
+      o.zoom,
+      o.merge,
+      shapes?.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(Math.round)),
+    ].join();
     const m = mapsFor(k, () => {
-      const r = computeMaps(w, h, o, res);
+      const r = computeMaps(w, h, o, res, shapes);
       return { d: toURL(r.dmap, r.W, r.H), z: r.zmap && toURL(r.zmap, r.ZW, r.ZH), scale: r.scale, zscale: r.zscale };
     });
     if (k !== key) {
@@ -817,6 +874,40 @@ class LgMagnifier extends Base {
   }
 }
 
+// Merging glass: one pane cut to the smooth union of the children's boxes (border-radius kept), so children
+// closer than --lg-merge px melt together like liquid. Re-renders every frame while a child transitions.
+class LgMerge extends Base {
+  connectedCallback() {
+    if (this.glass) return;
+    glass(this, {
+      shapes: () => {
+        const o = this.getBoundingClientRect();
+        return Array.from(this.children, c => {
+          const b = c.getBoundingClientRect(),
+            r = parseFloat(getComputedStyle(c).borderTopLeftRadius) || 0;
+          return {
+            x: b.left - o.left,
+            y: b.top - o.top,
+            w: b.width,
+            h: b.height,
+            r: Math.min(r, b.width / 2, b.height / 2),
+          };
+        });
+      },
+    });
+    let moving = 0;
+    const tick = () => {
+      this.glass.update();
+      if (moving) requestAnimationFrame(tick);
+    };
+    this.addEventListener('transitionrun', () => moving++ || requestAnimationFrame(tick));
+    for (const type of ['transitionend', 'transitioncancel'])
+      this.addEventListener(type, () => (moving = Math.max(0, moving - 1)));
+    const ro = new ResizeObserver(() => this.glass.update());
+    for (const c of this.children) ro.observe(c);
+  }
+}
+
 const CSS = `
 ${Object.keys(DEFAULTS)
   .map(k => `@property --lg-${k} { syntax: '*'; inherits: false; }`)
@@ -1018,6 +1109,11 @@ lg-magnifier {
   &[drag] .lg-lens { scale: 1; pointer-events: auto; cursor: grab; touch-action: none; }
   &[drag] .lg-lens:active { cursor: grabbing; }
 }
+lg-merge {
+  display: inline-flex; align-items: center; gap: .75em; vertical-align: middle;
+  background: none; box-shadow: none; /* the glass is cut to the children's outline; a box fill would show the rectangle */
+}
+:where(lg-merge > *) { background-color: transparent; } /* plain buttons would bring the browser's grey */
 .lg-navbar {
   /* slots: leading, title, trailing. Clear at the top of its scroller; as the large title scrolls under it, the glass,
      the small title and a blur behind and just below it fade in (scroll-driven, no script) */
@@ -1127,6 +1223,7 @@ if (globalThis.document) {
   customElements.define('lg-dots', LgDots);
   customElements.define('lg-picker', LgPicker);
   customElements.define('lg-magnifier', LgMagnifier);
+  customElements.define('lg-merge', LgMerge);
 
   const scan = (node, fn) => {
     if (node.nodeType !== 1) return;

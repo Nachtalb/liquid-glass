@@ -1132,6 +1132,37 @@
           </article>
 
           <article class="card">
+            <div class="stage" style="--x: -540px; --y: -540px" data-snippet>
+              <lg-merge id="merge" style="gap: 8px">
+                <button class="lg-btn lg-round" aria-label="Zoom out">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M5 12h14" />
+                  </svg>
+                </button>
+                <button class="lg-btn lg-round" aria-label="Fit">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                  </svg>
+                </button>
+                <button class="lg-btn lg-round" aria-label="Zoom in">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </lg-merge>
+              <lg-slider id="merge-gap" aria-label="Gap" min="0" max="48" value="8" style="width: 85%"></lg-slider>
+            </div>
+            <div class="meta">
+              <h3>Merging glass</h3>
+              <p>
+                One pane of glass cut to the outline of its children. Closer than <code>--lg-merge</code> (20px) they
+                melt together; drag the slider to pull them apart.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage" style="--x: -120px; --y: -610px" data-snippet>
               <label class="lg-field" data-glass style="width: min(100%, 300px)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -1484,6 +1515,13 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
                   </td>
                 </tr>
                 <tr>
+                  <td>&lt;lg-merge&gt;</td>
+                  <td>
+                    One glass pane cut to the smooth union of its children's boxes; children closer than
+                    <code>--lg-merge</code> px melt together. Follows their size and transitions.
+                  </td>
+                </tr>
+                <tr>
                   <td>&lt;lg-magnifier&gt;</td>
                   <td>
                     Wraps any content; a zoom lens follows the pointer and keyboard focus. With <code>drag</code> the
@@ -1566,14 +1604,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">39.3 KB</span> · <span data-size="gzip">12.0 KB</span> gzipped</small
+                >Minified · <span data-size="min">41.0 KB</span> · <span data-size="gzip">12.6 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">56.1 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">59.8 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">12.0 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">12.6 KB</span> gzipped.</span>
         </div>
       </section>
     </main>
@@ -1784,6 +1822,9 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
       $('#alert').addEventListener('close', e =>
         toast(e.target.returnValue === 'delete' ? 'Scan deleted' : 'Kept the scan'),
       );
+
+      // Merging glass card: the slider sets the gap
+      $('#merge-gap').addEventListener('input', e => ($('#merge').style.gap = e.target.value + 'px'));
 
       // Stepper card shows its value
       $('lg-stepper[name=guests]').addEventListener('input', e => ($('#guests').value = e.target.value));
