@@ -223,17 +223,31 @@
         justify-self: stretch;
         font-size: 13px;
       }
-      .bench .lg-lens {
-        left: 43%;
-        top: 112px;
-        width: 176px;
-        height: 176px;
+      .lenses {
+        position: absolute;
+        inset: 0;
+        display: block;
         --lg-zoom: 1.6;
         --lg-bezel: 40;
         --lg-thickness: 70;
         --lg-specular: 0.8;
-        background: rgb(255 255 255 / 0.04);
-        box-shadow: 0 18px 40px rgb(0 0 0 / 0.35);
+        --lg-merge: 48;
+        & > * {
+          position: absolute;
+          border-radius: 50%;
+        }
+        & > :first-child {
+          left: 43%;
+          top: 112px;
+          width: 176px;
+          height: 176px;
+        }
+        & > :last-child {
+          left: calc(43% + 200px);
+          top: 236px;
+          width: 112px;
+          height: 112px;
+        }
       }
       .hint {
         position: absolute;
@@ -269,12 +283,19 @@
           grid-column: 1;
           grid-row: 4;
         }
-        .bench .lg-lens {
+        .lenses > :first-child {
           left: auto;
           right: 24px;
           top: 80px;
           width: 140px;
           height: 140px;
+        }
+        .lenses > :last-child {
+          left: auto;
+          right: 180px;
+          top: 150px;
+          width: 84px;
+          height: 84px;
         }
         .hint {
           display: none;
@@ -661,7 +682,7 @@
     </style>
   </head>
   <body>
-    <lg-magnifier drag class="bench stage" id="bench" role="banner">
+    <header class="bench stage" id="bench">
       <nav class="topbar" aria-label="Page">
         <span class="brand">liquid-glass.js</span>
         <label class="lg-field" data-glass>
@@ -720,8 +741,12 @@
         >
       </div>
 
-      <p class="hint" aria-hidden="true">Drag the lens</p>
-    </lg-magnifier>
+      <p class="hint" aria-hidden="true">Drag the lenses</p>
+      <lg-merge drag class="lenses" aria-hidden="true"
+        ><div></div>
+        <div></div
+      ></lg-merge>
+    </header>
 
     <main>
       <section class="sec" id="components">
@@ -1525,7 +1550,8 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
                   <td>&lt;lg-merge&gt;</td>
                   <td>
                     One glass pane cut to the smooth union of its children's boxes; children closer than
-                    <code>--lg-merge</code> px melt together. Follows their size and transitions.
+                    <code>--lg-merge</code> px melt together. Follows their size and transitions; with <code>drag</code>
+                    you move the children, like the lenses on the bench.
                   </td>
                 </tr>
                 <tr>
@@ -1835,7 +1861,7 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
       $('#q').addEventListener('focus', () => float(true));
       $('#q').addEventListener('blur', e => float(!!e.target.value));
 
-      const lens = $('#bench').lens; // the hero is an <lg-magnifier drag>
+      const lens = $('.lenses'); // both bench lenses are one <lg-merge drag>
 
       // Toast card
       $('#toast-btn').addEventListener('click', () => toast('Lens 2 is back in spec · 0.04 λ RMS'));
