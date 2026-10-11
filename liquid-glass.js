@@ -280,8 +280,7 @@ function toURL(data, W, H) {
 }
 
 // fixed resolution levels for shaped glass: steps that never drift between frames
-const MOVING = [1 / 2, 1 / 3, 1 / 4, 1 / 5, 1 / 8],
-  STILL = [2, 1, 1 / 2];
+const LEVELS = [2, 1, 1 / 2];
 
 function readOpts(el, opts) {
   const cs = getComputedStyle(el),
@@ -322,9 +321,6 @@ export function glass(el, opts = {}) {
   const fe = {}; // primitives by result name
   let key,
     zoomed,
-    geo,
-    changed = 0,
-    settle,
     shown = true;
   const show = () => el.style.setProperty('--lg-filter', shown ? `url(#${filter.id})` : 'none');
 
@@ -359,25 +355,11 @@ export function glass(el, opts = {}) {
       fe.slope = filter.querySelector('feFuncA');
       key = null;
     }
-    // ~16 samples across the bezel is plenty. Shapes also carry the outline in the map, so at rest they render
-    // per device pixel to stay crisp (feImage pixels are re-sent every frame, so within a budget); while they
-    // move (re-rendering every frame) coarser, sharpened once still.
     let m;
     if (shapes) {
-      // Shapes carry the outline in the map, so at rest they render per device pixel to stay crisp; while they
-      // change shape (re-rendering every frame) coarser, sharpened once still. Fixed levels, so it never drifts.
-      // "moving" until the shape has held still for 150ms: a second render of the same frame (resize observer)
-      // must not count as still, or every other frame renders at full resolution
-      const g = JSON.stringify([w, h, shapes]),
-        now = performance.now();
-      if (g !== geo) [geo, changed] = [g, now];
-      const moving = now - changed < 150;
-      clearTimeout(settle);
-      if (moving) settle = setTimeout(render, 160 - (now - changed));
-      // pixel budgets: ~25k a frame while changing, ~100k once still (feImage pixels are re-sent every frame)
-      const res = moving
-          ? (MOVING.find(l => l * l * w * h <= 2.5e4) ?? 1 / 8)
-          : (STILL.find(l => l <= (devicePixelRatio || 1) && l * l * w * h <= 1e5) ?? 1 / 2),
+      // Shapes carry the outline in the map, so they render per device pixel to stay crisp, moving or not, within
+      // ~100k pixels (feImage pixels are re-sent every frame). Fixed levels, so it never drifts.
+      const res = LEVELS.find(l => l <= (devicePixelRatio || 1) && l * l * w * h <= 1e5) ?? 1 / 2,
         k = [w, h, res, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom, o.merge]
           .concat(shapes.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(v => Math.round(v * 4))))
           .join();
@@ -451,7 +433,6 @@ export function glass(el, opts = {}) {
       show();
     },
     destroy() {
-      clearTimeout(settle);
       ro.disconnect();
       onScreen?.unobserve(el);
       filter.remove();
