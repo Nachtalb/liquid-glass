@@ -1031,10 +1031,11 @@ lg-dock {
   /* as tall as the large detent and opens at the medium one (top half of the screen); height: auto sizes it to the content */
   position: fixed; inset: auto .5em .5em; margin: 0 auto; width: auto; max-width: 36em; height: calc(100dvh - 3em); max-height: none;
   border: 0; padding: 1.75em 1.25em 1.25em; border-radius: 2em; overflow: hidden; touch-action: none; user-select: none;
+  flex-direction: column; /* not under [open]: display stays flex through the closing transition, this must too */
   translate: 0 calc(100% + 1em);
   transition: translate .3s cubic-bezier(.4, 0, 1, 1), display .3s allow-discrete, overlay .3s allow-discrete;
   /* --lg-detent: offset from fully open, set by the drag */
-  &[open] { display: flex; flex-direction: column; translate: 0 var(--lg-detent, max(0px, 100% - 50dvh)); transition: translate .5s var(--lg-glide), display .5s allow-discrete, overlay .5s allow-discrete; }
+  &[open] { display: flex; translate: 0 var(--lg-detent, max(0px, 100% - 50dvh)); transition: translate .5s var(--lg-glide), display .5s allow-discrete, overlay .5s allow-discrete; }
   @starting-style { &[open] { translate: 0 calc(100% + 1em); } }
   &[data-dragging] { transition: none; }
   &::after { content: ''; position: absolute; top: .6em; left: 50%; width: 2.5em; height: .3em; translate: -50%; border-radius: 1em; background: currentColor; opacity: .25; }
