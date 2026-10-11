@@ -80,7 +80,7 @@ const sdRect = (px, py, s) => {
 export function computeMaps(
   w,
   h,
-  { radius: r, bezel, thickness, profile, ior, light, zoom, merge = 0, zmax: zrange },
+  { radius: r, bezel, thickness, profile, ior, light, zoom, merge = 0 },
   res = 1,
   shapes,
 ) {
@@ -201,9 +201,7 @@ export function computeMaps(
   // so a quarter of the map's resolution still does.
   const z = 1 - 1 / zoom,
     zmax =
-      zrange || // given when several maps must share one scale
-      (shapes ? Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + pad : Math.max(w, h) / 2) * Math.abs(z) ||
-      1;
+      (shapes ? Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + pad : Math.max(w, h) / 2) * Math.abs(z) || 1;
   const ZW = z ? (shapes ? Math.max(2, Math.ceil(W / 4)) : Math.min(32, W)) : 0,
     ZH = z ? (shapes ? Math.max(2, Math.ceil(H / 4)) : Math.min(32, H)) : 0,
     zmap = z ? new Uint8ClampedArray(ZW * ZH * 4) : null;
@@ -280,97 +278,9 @@ function toURL(data, W, H) {
   return canvas.toDataURL();
 }
 
-function toCanvas(data, W, H) {
-  const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
-  c.getContext('2d').putImageData(new ImageData(data, W, H), 0, 0);
-  return c;
-}
-
-// Shapes only melt with shapes in reach, so a cheap box-distance check groups them into clusters. A cluster's
-// map depends only on its own shapes' relative geometry, so it's cached: a lens moving alone, or one sitting
-// still, costs no recompute, just drawing the cached maps into one at their offsets. The map sits on a fixed
-// grid: whole-pixel steps (1/res) anchored to the element, so a lens that stays put is drawn at the same spot
-// every frame and nothing rescales (that read as flicker).
+// fixed resolution levels for shaped glass: steps that never drift between frames
 const MOVING = [1 / 2, 1 / 3, 1 / 4, 1 / 5, 1 / 8],
   STILL = [2, 1, 1 / 2];
-let dcan, zcan;
-function shapeMaps(shapes, o, moving, w, h) {
-  const p = o.merge / 4 + 2,
-    near = o.merge * 1.25 + 2 + p, // closer than this the union between two shapes can change
-    up = shapes.map((_, i) => i),
-    top = i => (up[i] === i ? i : (up[i] = top(up[i])));
-  for (let i = 0; i < shapes.length; i++)
-    for (let j = i + 1; j < shapes.length; j++) {
-      const a = shapes[i],
-        b = shapes[j];
-      if (
-        Math.abs(a.x + a.w / 2 - b.x - b.w / 2) - (a.w + b.w) / 2 < near &&
-        Math.abs(a.y + a.h / 2 - b.y - b.h / 2) - (a.h + b.h) / 2 < near
-      )
-        up[top(i)] = top(j);
-    }
-  const groups = Object.values(Object.groupBy(shapes, (_, i) => top(i))),
-    boxes = groups.map(g => [
-      Math.min(...g.map(s => s.x)) - p,
-      Math.min(...g.map(s => s.y)) - p,
-      Math.max(...g.map(s => s.x + s.w)) + p,
-      Math.max(...g.map(s => s.y + s.h)) + p,
-    ]),
-    x0 = Math.max(0, Math.min(...boxes.map(b => b[0]))),
-    y0 = Math.max(0, Math.min(...boxes.map(b => b[1]))),
-    area =
-      (Math.min(w, Math.max(...boxes.map(b => b[2]))) - x0) * (Math.min(h, Math.max(...boxes.map(b => b[3]))) - y0);
-  if (!(area > 0)) return null;
-  // pixel budgets: ~25k a frame while moving, ~100k once still (feImage pixels are re-sent every frame)
-  const res = moving
-      ? (MOVING.find(l => l * l * area <= 2.5e4) ?? 1 / 8)
-      : (STILL.find(l => l <= (devicePixelRatio || 1) && l * l * area <= 1e5) ?? 1 / 2),
-    g = 4 * Math.max(1, 1 / res), // grid step in css px, whole; 4× as the zoom map is a quarter the resolution
-    bx = Math.floor(x0 / g) * g,
-    by = Math.floor(y0 / g) * g,
-    ew = Math.min(w, Math.max(...boxes.map(b => b[2]))) - bx,
-    eh = Math.min(h, Math.max(...boxes.map(b => b[3]))) - by,
-    W = Math.ceil(ew * res),
-    H = Math.ceil(eh * res),
-    zmax = (Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + p) * Math.abs(1 - 1 / o.zoom) || 1;
-  const parts = groups.map((g, i) => {
-    const [cx, cy, cx1, cy1] = boxes[i],
-      cw = Math.ceil((cx1 - cx) * res) / res,
-      ch = Math.ceil((cy1 - cy) * res) / res,
-      rel = g.map(s => ({ ...s, x: s.x - cx, y: s.y - cy })),
-      k = [cw, ch, res, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom, o.merge, zmax]
-        .concat(rel.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(v => Math.round(v * 4))))
-        .join();
-    const m = mapsFor(k, () => {
-      const r = computeMaps(cw, ch, { ...o, zmax }, res, rel);
-      return { d: toCanvas(r.dmap, r.W, r.H), z: r.zmap && toCanvas(r.zmap, r.ZW, r.ZH), cw, ch, scale: r.scale };
-    });
-    return { m, k, x: (cx - bx) * res, y: (cy - by) * res };
-  });
-  return {
-    bx,
-    by,
-    bw: W / res,
-    bh: H / res,
-    scale: parts[0].m.scale,
-    zscale: 2 * zmax,
-    key: [W, H, res].concat(parts.map(q => `${q.k}@${q.x},${q.y}`)).join('|'),
-    urls() {
-      dcan ??= document.createElement('canvas');
-      Object.assign(dcan, { width: W, height: H }); // also clears it
-      const dc = dcan.getContext('2d');
-      for (const q of parts) dc.drawImage(q.m.d, q.x, q.y); // sub-pixel offsets resample bilinearly
-      if (!parts[0].m.z) return { d: dcan.toDataURL() };
-      zcan ??= document.createElement('canvas');
-      Object.assign(zcan, { width: Math.ceil(W / 4), height: Math.ceil(H / 4) });
-      const zc = zcan.getContext('2d');
-      zc.fillStyle = 'rgb(128 128 128)'; // no zoom between clusters
-      zc.fillRect(0, 0, zcan.width, zcan.height);
-      for (const q of parts) zc.drawImage(q.m.z, q.x / 4, q.y / 4, (q.m.cw * res) / 4, (q.m.ch * res) / 4);
-      return { d: dcan.toDataURL(), z: zcan.toDataURL() };
-    },
-  };
-}
 
 function readOpts(el, opts) {
   const cs = getComputedStyle(el),
@@ -417,7 +327,7 @@ export function glass(el, opts = {}) {
   const show = () => el.style.setProperty('--lg-filter', shown ? `url(#${filter.id})` : 'none');
 
   const render = () => {
-    const [o, cs] = readOpts(el, opts),
+    const [o, cs] = readOpts(opts.source ?? el, opts),
       b = parseFloat(cs.borderLeftWidth),
       br = cs.borderTopLeftRadius;
     const w = el.offsetWidth - b - parseFloat(cs.borderRightWidth),
@@ -450,21 +360,34 @@ export function glass(el, opts = {}) {
     // ~16 samples across the bezel is plenty. Shapes also carry the outline in the map, so at rest they render
     // per device pixel to stay crisp (feImage pixels are re-sent every frame, so within a budget); while they
     // move (re-rendering every frame) coarser, sharpened once still.
-    let m,
-      [bx, by, bw, bh] = [0, 0, w, h];
+    let m;
     if (shapes) {
-      // only the shapes' bounding box costs anything: the pane (::before) shrinks to it. Moving the pane, not
-      // the map: Chromium misplaces a backdrop filter's feImage that doesn't start at 0, 0.
-      // Shapes also carry the outline in the map, so at rest they render per device pixel to stay crisp; while
-      // they move (re-rendering every frame) coarser, sharpened once still.
-      const g = shapes.flatMap(s => [s.x, s.y, s.w, s.h]).join(),
+      // Shapes carry the outline in the map, so at rest they render per device pixel to stay crisp; while they
+      // change shape (re-rendering every frame) coarser, sharpened once still. Fixed levels, so it never drifts.
+      const g = JSON.stringify([w, h, shapes]),
         moving = geo !== undefined && g !== geo;
       geo = g;
       clearTimeout(settle);
       if (moving) settle = setTimeout(render, 150);
-      m = shapeMaps(shapes, o, moving, w, h);
-      if (!m) return;
-      ({ bx, by, bw, bh } = m);
+      // pixel budgets: ~25k a frame while changing, ~100k once still (feImage pixels are re-sent every frame)
+      const res = moving
+          ? (MOVING.find(l => l * l * w * h <= 2.5e4) ?? 1 / 8)
+          : (STILL.find(l => l <= (devicePixelRatio || 1) && l * l * w * h <= 1e5) ?? 1 / 2),
+        k = [w, h, res, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom, o.merge]
+          .concat(shapes.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(v => Math.round(v * 4))))
+          .join();
+      m = {
+        key: k,
+        ...mapsFor(k, () => {
+          const r = computeMaps(w, h, o, res, shapes);
+          return {
+            d: toURL(r.dmap, r.W, r.H),
+            z: r.zmap && toURL(r.zmap, r.ZW, r.ZH),
+            scale: r.scale,
+            zscale: r.zscale,
+          };
+        }),
+      };
     } else {
       const res = Math.min(1, Math.max(0.5, 16 / o.bezel)), // ~16 samples across the bezel is plenty
         k = [w, h, res, o.radius, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom].join();
@@ -481,8 +404,7 @@ export function glass(el, opts = {}) {
         }),
       };
     }
-    const fresh = m.key !== key,
-      urls = fresh && (m.urls ? mapsFor(m.key, m.urls) : m);
+    const fresh = m.key !== key;
     key = m.key;
     for (const [img, u] of [
       [fe.map, 'd'],
@@ -492,14 +414,12 @@ export function glass(el, opts = {}) {
       for (const [a, v] of [
         ['x', 0],
         ['y', 0],
-        ['width', bw],
-        ['height', bh],
+        ['width', w],
+        ['height', h],
       ])
         img.setAttribute(a, v);
-      if (fresh) img.setAttribute('href', urls[u]);
+      if (fresh) img.setAttribute('href', m[u]);
     }
-    // set on every glass element, so a nested one doesn't inherit its ancestor's
-    el.style.setProperty('--lg-inset', `${by}px ${w - bx - bw}px ${h - by - bh}px ${bx}px`);
     fe.zoomed?.setAttribute('scale', m.zscale);
     // feDisplacementMap picks the nearest source pixel, so zoomed content (in or out) steps; a blur sized to the
     // magnification (in device px) smooths it like bilinear sampling would. Folded into the frost blur.
@@ -1032,16 +952,30 @@ class LgMagnifier extends Base {
   }
 }
 
-// Merging glass: one pane cut to the smooth union of the children's boxes (border-radius kept), so children
-// closer than --lg-merge px melt together like liquid. Re-renders every frame while a child transitions.
+// Merging glass: children closer than --lg-merge px melt together like liquid. Shapes that can melt (a cheap box
+// distance check) share a pane: an element of its own, glass cut to the smooth union of their boxes (border-radius
+// kept). A pane is only re-rendered when its own shapes change relative to each other, so moving a lone child just
+// moves its pane, and the others aren't touched at all. Follows the children's size and transitions.
 // With the drag attribute the children are moved by dragging, kept inside the element.
 class LgMerge extends Base {
   connectedCallback() {
-    if (this.glass) return;
-    glass(this, {
-      shapes: () => {
-        const o = this.getBoundingClientRect();
-        return Array.from(this.children, c => {
+    if (this.panes) return;
+    this.panes = new Map(); // members → pane
+    const opts = {};
+    this.glass = {
+      update: o => {
+        Object.assign(opts, o);
+        for (const pane of this.panes.values()) pane.glass.update(o);
+        this.layout();
+      },
+    };
+    this.layout = () => {
+      const o = this.getBoundingClientRect(),
+        kids = [...this.children].filter(c => !c.classList.contains('lg-pane')),
+        k = opts.merge ?? (parseFloat(getComputedStyle(this).getPropertyValue('--lg-merge')) || 20),
+        p = k / 4 + 2, // the union reaches k/4 past a shape, plus its antialiased edge
+        near = k * 1.25 + 2 + p, // closer than this, the union between two shapes can change
+        rects = kids.map(c => {
           const b = c.getBoundingClientRect(),
             br = getComputedStyle(c).borderTopLeftRadius,
             r = br.endsWith('%') ? (parseFloat(br) / 100) * Math.min(b.width, b.height) : parseFloat(br) || 0;
@@ -1052,23 +986,66 @@ class LgMerge extends Base {
             h: b.height,
             r: Math.min(r, b.width / 2, b.height / 2),
           };
-        });
-      },
-    });
+        }),
+        up = rects.map((_, i) => i),
+        top = i => (up[i] === i ? i : (up[i] = top(up[i])));
+      for (let i = 0; i < rects.length; i++)
+        for (let j = i + 1; j < rects.length; j++) {
+          const a = rects[i],
+            b = rects[j];
+          if (
+            Math.abs(a.x + a.w / 2 - b.x - b.w / 2) - (a.w + b.w) / 2 < near &&
+            Math.abs(a.y + a.h / 2 - b.y - b.h / 2) - (a.h + b.h) / 2 < near
+          )
+            up[top(i)] = top(j);
+        }
+      const live = new Set();
+      for (const members of Object.values(Object.groupBy(rects.keys(), i => top(i)))) {
+        const id = members.join(),
+          g = members.map(i => rects[i]),
+          x = Math.min(...g.map(s => s.x)) - p,
+          y = Math.min(...g.map(s => s.y)) - p,
+          q = v => Math.round(v * 100) / 100, // else float noise (175.99997 wide) reads as a change on every move
+          shapes = g.map(s => ({ x: q(s.x - x), y: q(s.y - y), w: q(s.w), h: q(s.h), r: q(s.r) })),
+          w = q(Math.max(...g.map(s => s.x + s.w)) + p - x),
+          h = q(Math.max(...g.map(s => s.y + s.h)) + p - y),
+          shape = JSON.stringify([w, h, shapes]);
+        let pane = this.panes.get(id);
+        if (!pane) {
+          pane = Object.assign(document.createElement('div'), { className: 'lg-pane' });
+          glass(pane, { ...opts, source: this, shapes: () => pane.shapes });
+          this.append(pane); // last, so authors' :first-child / :nth-child still count their own children
+          this.panes.set(id, pane);
+        }
+        live.add(id);
+        pane.style.translate = `${x}px ${y}px`; // a lone child moving only moves its pane
+        if (shape === pane.shape) continue;
+        pane.shape = shape;
+        pane.shapes = shapes;
+        Object.assign(pane.style, { width: `${w}px`, height: `${h}px` });
+        pane.glass.update();
+      }
+      for (const [id, pane] of this.panes)
+        if (!live.has(id)) {
+          this.panes.delete(id);
+          pane.remove();
+        }
+    };
     let moving = 0;
     const tick = () => {
-      this.glass.update();
+      this.layout();
       if (moving) requestAnimationFrame(tick);
     };
     this.addEventListener('transitionrun', () => moving++ || requestAnimationFrame(tick));
     for (const type of ['transitionend', 'transitioncancel'])
       this.addEventListener(type, () => (moving = Math.max(0, moving - 1)));
-    const ro = new ResizeObserver(() => this.glass.update());
+    const ro = new ResizeObserver(() => this.layout());
+    ro.observe(this);
     for (const c of this.children) ro.observe(c);
     if (!this.hasAttribute('drag')) return;
     this.addEventListener('pointerdown', e => {
-      const c = [...this.children].find(c => c.contains(e.target));
-      if (e.button || !c) return;
+      const c = e.target.closest('lg-merge > :not(.lg-pane)');
+      if (e.button || c?.parentElement !== this) return;
       c.setPointerCapture(e.pointerId);
       const r = c.getBoundingClientRect(),
         h = this.getBoundingClientRect(),
@@ -1080,7 +1057,7 @@ class LgMerge extends Base {
         c.style.translate = `${x0 + dx}px ${y0 + dy}px`;
         raf ||= requestAnimationFrame(() => {
           raf = 0;
-          this.glass.update();
+          this.layout();
         });
       };
       c.addEventListener('pointermove', move);
@@ -1109,7 +1086,7 @@ ${Object.keys(DEFAULTS)
 }
 :where([data-glass]) { position: relative; isolation: isolate; background-color: var(--lg-tint); box-shadow: var(--lg-shadow); }
 [data-glass]::before {
-  content: ''; position: absolute; inset: var(--lg-inset, 0); z-index: -1; border-radius: inherit; pointer-events: none;
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
   backdrop-filter: var(--lg-filter);
 }
 
@@ -1293,13 +1270,15 @@ lg-magnifier {
   &[data-lens] .lg-lens { scale: 1; transition: scale .5s var(--lg-spring); }
 }
 lg-merge {
-  display: inline-flex; align-items: center; gap: .75em; vertical-align: middle;
-  background: none; box-shadow: none; /* the glass is cut to the children's outline; a box fill would show the rectangle */
+  position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: .75em; vertical-align: middle;
+  /* !important: a page's lg-merge > * rules mustn't move, round or fill the panes */
+  & > .lg-pane { position: absolute !important; inset: 0 auto auto 0 !important; z-index: -1; pointer-events: none !important; background: none !important; box-shadow: none !important; }
+  & > .lg-pane::before { border-radius: 0 !important; }
 }
 :where(lg-merge > *) { background-color: transparent; } /* plain buttons would bring the browser's grey */
 lg-merge[drag] { pointer-events: none; } /* an overlay: only the children catch the pointer */
-lg-merge[drag] > * { pointer-events: auto; cursor: grab; touch-action: none; user-select: none; }
-lg-merge[drag] > :active { cursor: grabbing; }
+lg-merge[drag] > :not(.lg-pane) { pointer-events: auto; cursor: grab; touch-action: none; user-select: none; }
+lg-merge[drag] > :not(.lg-pane):active { cursor: grabbing; }
 .lg-navbar {
   /* slots: leading, title, trailing. Clear at the top of its scroller; as the large title scrolls under it, the glass,
      the small title and a blur behind and just below it fade in (scroll-driven, no script) */
