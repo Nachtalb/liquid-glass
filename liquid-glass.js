@@ -258,6 +258,8 @@ export function glass(el, opts = {}) {
   const fe = {}; // primitives by result name
   let key,
     zoomed,
+    geo,
+    settle,
     shown = true;
   const show = () => el.style.setProperty('--lg-filter', shown ? `url(#${filter.id})` : 'none');
 
@@ -292,8 +294,17 @@ export function glass(el, opts = {}) {
       fe.slope = filter.querySelector('feFuncA');
       key = null;
     }
-    // ~16 samples across the bezel is plenty; shapes re-render while they move, so they always go half size
-    const res = shapes ? 0.5 : Math.min(1, Math.max(0.5, 16 / o.bezel));
+    // ~16 samples across the bezel is plenty. Shapes also carry the outline in the map, so at rest they render
+    // per device pixel to stay crisp; while they move (re-rendering every frame) half size, sharpened once still.
+    let res = Math.min(1, Math.max(0.5, 16 / o.bezel));
+    if (shapes) {
+      const g = shapes.flatMap(s => [s.x, s.y, s.w, s.h]).join(),
+        moving = geo !== undefined && g !== geo;
+      geo = g;
+      res = moving ? 0.5 : Math.min(2, devicePixelRatio || 1);
+      clearTimeout(settle);
+      if (moving) settle = setTimeout(render, 150);
+    }
     const k = [
       w,
       h,
@@ -355,6 +366,7 @@ export function glass(el, opts = {}) {
       show();
     },
     destroy() {
+      clearTimeout(settle);
       ro.disconnect();
       onScreen?.unobserve(el);
       filter.remove();
