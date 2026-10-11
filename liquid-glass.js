@@ -274,7 +274,8 @@ function toURL(data, W, H) {
   canvas ??= document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
-  canvas.getContext('2d').putImageData(new ImageData(data, W, H), 0, 0);
+  // a CPU canvas: a GPU one would read the pixels back from the GPU for every toDataURL
+  canvas.getContext('2d', { willReadFrequently: true }).putImageData(new ImageData(data, W, H), 0, 0);
   return canvas.toDataURL();
 }
 
