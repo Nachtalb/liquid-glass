@@ -9,7 +9,7 @@
 // Tune per element with CSS custom properties (non-inherited) or glass(el, opts):
 //   --lg-profile squircle|circle|concave|lip   --lg-bezel px   --lg-thickness px   --lg-ior
 //   --lg-refraction 0..n   --lg-blur px   --lg-saturation   --lg-specular 0..1   --lg-light deg
-//   --lg-zoom (>1 magnifies)
+//   --lg-zoom (>1 magnifies)   --lg-antialias (smoothing of zoomed pixels, 1 = auto, 0 = off)
 // Values are read when the element is first glassed and on every resize. Call el.glass.update() after changing them.
 //
 // The backdrop-filter lives on the element's ::before (inset: 0, z-index: -1), not on the element itself:
@@ -18,8 +18,17 @@
 // their own ::before is taken, and opacity < 1 on the element hides what is behind the glass.
 
 const DEFAULTS = {
-  profile: 'squircle', bezel: 'auto', thickness: 'auto', ior: 1.5, refraction: 1,
-  blur: 1, saturation: 5, specular: 0.7, light: 225, zoom: 1,
+  profile: 'squircle',
+  bezel: 'auto',
+  thickness: 'auto',
+  ior: 1.5,
+  refraction: 1,
+  blur: 1,
+  saturation: 5,
+  specular: 0.7,
+  light: 225,
+  zoom: 1,
+  antialias: 1,
 };
 
 const smootherstep = t => t * t * t * (t * (t * 6 - 15) + 10);
@@ -34,14 +43,21 @@ export const profiles = {
 // Horizontal displacement (px, + = towards the centre) of a vertical ray hitting the bezel at n
 // points. One refraction (Snell), air → glass, glass sits directly on the background.
 export function bezelDisplacement(f, bezel, thickness, ior, n = 128) {
-  const out = new Float32Array(n), eta = 1 / ior, d = 1e-3;
+  const out = new Float32Array(n),
+    eta = 1 / ior,
+    d = 1e-3;
   for (let i = 0; i < n; i++) {
-    const u = i / n, a = Math.max(0, u - d), b = Math.min(1, u + d);
-    const slope = (f(b) - f(a)) / (b - a) * thickness / bezel;
-    const len = Math.hypot(slope, 1), nx = -slope / len, nz = 1 / len; // surface normal, x points inward
+    const u = i / n,
+      a = Math.max(0, u - d),
+      b = Math.min(1, u + d);
+    const slope = (((f(b) - f(a)) / (b - a)) * thickness) / bezel;
+    const len = Math.hypot(slope, 1),
+      nx = -slope / len,
+      nz = 1 / len; // surface normal, x points inward
     const c = eta * nz - Math.sqrt(1 - eta * eta * (1 - nz * nz));
-    const tx = c * nx, tz = c * nz - eta; // refracted direction (incident = (0, -1))
-    out[i] = tx * f(u) * thickness / -tz;
+    const tx = c * nx,
+      tz = c * nz - eta; // refracted direction (incident = (0, -1))
+    out[i] = (tx * f(u) * thickness) / -tz;
   }
   return out;
 }
@@ -50,41 +66,73 @@ export function bezelDisplacement(f, bezel, thickness, ior, n = 128) {
 // Plus a magnifier map if zoom ≠ 1. scale/zscale are the matching feDisplacementMap scales.
 // res < 1 renders the maps smaller; feImage stretches them back (the fields are smooth).
 export function computeMaps(w, h, { radius: r, bezel, thickness, profile, ior, light, zoom }, res = 1) {
-  const W = Math.ceil(w * res), H = Math.ceil(h * res), n = 128;
+  const W = Math.ceil(w * res),
+    H = Math.ceil(h * res),
+    n = 128;
   const disp = bezelDisplacement(profiles[profile] ?? profiles.squircle, bezel, thickness, ior, n);
   // Physics says 0 right at the rim, then a near-vertical climb to the peak: hold the peak out to the rim
   // instead, or that cliff aliases into a sawtooth edge.
-  const peak = disp.reduce((p, v, i) => Math.abs(v) > Math.abs(disp[p]) ? i : p, 0);
+  const peak = disp.reduce((p, v, i) => (Math.abs(v) > Math.abs(disp[p]) ? i : p), 0);
   disp.fill(disp[peak], 0, peak);
   const max = Math.abs(disp[peak]) || 1;
-  const lx = Math.cos(light * Math.PI / 180), ly = Math.sin(light * Math.PI / 180);
+  const lx = Math.cos((light * Math.PI) / 180),
+    ly = Math.sin((light * Math.PI) / 180);
   const dmap = new Uint8ClampedArray(W * H * 4);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const px = (x + 0.5) * w / W - w / 2, py = (y + 0.5) * h / H - h / 2; // feImage stretches W×H onto w×h
-    const qx = Math.abs(px) - w / 2 + r, qy = Math.abs(py) - h / 2 + r;
-    let e, nx = 0, ny = 0; // e: distance inside the edge, (nx, ny): outward edge normal
-    if (qx > 0 && qy > 0) { const l = Math.hypot(qx, qy); e = r - l; nx = qx / l; ny = qy / l }
-    else if (qx > qy) { e = r - qx; nx = 1 } else { e = r - qy; ny = 1 }
-    nx *= Math.sign(px) || 1; ny *= Math.sign(py) || 1;
-    let dx = 0, dy = 0, s = 0;
-    if (e < bezel) { // outside the shape too (e < 0): keeps low-res maps from stair-stepping, the clip draws the edge
-      const ee = Math.max(e, 0), m = disp[Math.min(n - 1, ee / bezel * n | 0)];
-      dx = -nx * m; dy = -ny * m;
-      s = (nx * lx + ny * ly) ** 2 * Math.exp(-ee / Math.max(2, 1 / res)); // rim light, strongest facing the light axis
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const px = ((x + 0.5) * w) / W - w / 2,
+        py = ((y + 0.5) * h) / H - h / 2; // feImage stretches W×H onto w×h
+      const qx = Math.abs(px) - w / 2 + r,
+        qy = Math.abs(py) - h / 2 + r;
+      let e,
+        nx = 0,
+        ny = 0; // e: distance inside the edge, (nx, ny): outward edge normal
+      if (qx > 0 && qy > 0) {
+        const l = Math.hypot(qx, qy);
+        e = r - l;
+        nx = qx / l;
+        ny = qy / l;
+      } else if (qx > qy) {
+        e = r - qx;
+        nx = 1;
+      } else {
+        e = r - qy;
+        ny = 1;
+      }
+      nx *= Math.sign(px) || 1;
+      ny *= Math.sign(py) || 1;
+      let dx = 0,
+        dy = 0,
+        s = 0;
+      if (e < bezel) {
+        // outside the shape too (e < 0): keeps low-res maps from stair-stepping, the clip draws the edge
+        const ee = Math.max(e, 0),
+          m = disp[Math.min(n - 1, ((ee / bezel) * n) | 0)];
+        dx = -nx * m;
+        dy = -ny * m;
+        s = (nx * lx + ny * ly) ** 2 * Math.exp(-ee / Math.max(2, 1 / res)); // rim light, strongest facing the light axis
+      }
+      const i = (y * W + x) * 4;
+      dmap[i] = 128 + (dx / max) * 127;
+      dmap[i + 1] = 128 + (dy / max) * 127;
+      dmap[i + 2] = s * 255;
+      dmap[i + 3] = 255;
     }
-    const i = (y * W + x) * 4;
-    dmap[i] = 128 + dx / max * 127; dmap[i + 1] = 128 + dy / max * 127; dmap[i + 2] = s * 255; dmap[i + 3] = 255;
-  }
   // Magnifier: sample towards the centre. The field is linear and feImage upscaling interpolates it
   // exactly, so ≤32px is plenty. Per-axis range (not the diagonal) keeps the 8-bit steps finer.
-  const z = 1 - 1 / zoom, zmax = Math.max(w, h) / 2 * Math.abs(z) || 1;
-  const ZW = z ? Math.min(32, W) : 0, ZH = z ? Math.min(32, H) : 0, zmap = z ? new Uint8ClampedArray(ZW * ZH * 4) : null;
-  for (let y = 0; y < ZH; y++) for (let x = 0; x < ZW; x++) {
-    const i = (y * ZW + x) * 4;
-    zmap[i] = 128 - ((x + 0.5) * w / ZW - w / 2) * z / zmax * 127;
-    zmap[i + 1] = 128 - ((y + 0.5) * h / ZH - h / 2) * z / zmax * 127;
-    zmap[i + 2] = 128; zmap[i + 3] = 255;
-  }
+  const z = 1 - 1 / zoom,
+    zmax = (Math.max(w, h) / 2) * Math.abs(z) || 1;
+  const ZW = z ? Math.min(32, W) : 0,
+    ZH = z ? Math.min(32, H) : 0,
+    zmap = z ? new Uint8ClampedArray(ZW * ZH * 4) : null;
+  for (let y = 0; y < ZH; y++)
+    for (let x = 0; x < ZW; x++) {
+      const i = (y * ZW + x) * 4;
+      zmap[i] = 128 - (((((x + 0.5) * w) / ZW - w / 2) * z) / zmax) * 127;
+      zmap[i + 1] = 128 - (((((y + 0.5) * h) / ZH - h / 2) * z) / zmax) * 127;
+      zmap[i + 2] = 128;
+      zmap[i + 3] = 255;
+    }
   // feDisplacementMap moves by scale × (C − 0.5), so a full ±127 step is only half the scale
   return { W, H, dmap, ZW, ZH, zmap, scale: 2 * max, zscale: z ? 2 * zmax : 0 };
 }
@@ -94,9 +142,13 @@ export function computeMaps(w, h, { radius: r, bezel, thickness, profile, ior, l
 const NS = 'http://www.w3.org/2000/svg';
 // Chromium re-sends a reference filter, feImage pixels included, with every compositor frame,
 // so the chain carries one small map and skips the zoom stage unless it is used.
-const FILTER = zoom => `${zoom ? `
+const FILTER = zoom => `${
+  zoom
+    ? `
 <feImage preserveAspectRatio="none" result="zmap"/>
-<feDisplacementMap in="SourceGraphic" in2="zmap" xChannelSelector="R" yChannelSelector="G" result="zoomed"/>` : ''}
+<feDisplacementMap in="SourceGraphic" in2="zmap" xChannelSelector="R" yChannelSelector="G" result="zoomed"/>`
+    : ''
+}
 <feGaussianBlur in="${zoom ? 'zoomed' : 'SourceGraphic'}" edgeMode="duplicate" result="blur"/>
 <feImage preserveAspectRatio="none" result="map"/>
 <feDisplacementMap in="blur" in2="map" xChannelSelector="R" yChannelSelector="G" result="refracted"/>
@@ -107,12 +159,14 @@ const FILTER = zoom => `${zoom ? `
 <feBlend in="rim" in2="refracted" result="rimmed"/>
 <feBlend in="highlight" in2="rimmed"/>`;
 
-let uid = 0, svg;
+let uid = 0,
+  svg;
 const cache = new Map(); // geometry key → map URLs + scales, small LRU
 
 function mapsFor(key, make) {
   let v = cache.get(key);
-  if (v) cache.delete(key); else v = make();
+  if (v) cache.delete(key);
+  else v = make();
   cache.set(key, v);
   if (cache.size > 64) cache.delete(cache.keys().next().value);
   return v;
@@ -120,23 +174,29 @@ function mapsFor(key, make) {
 
 function toURL(data, W, H) {
   const c = document.createElement('canvas');
-  c.width = W; c.height = H;
+  c.width = W;
+  c.height = H;
   c.getContext('2d').putImageData(new ImageData(data, W, H), 0, 0);
   return c.toDataURL();
 }
 
 function readOpts(el, opts) {
-  const cs = getComputedStyle(el), o = {};
+  const cs = getComputedStyle(el),
+    o = {};
   for (const k in DEFAULTS) {
-    const v = String(opts[k] ?? cs.getPropertyValue('--lg-' + k)).trim(), n = parseFloat(v);
+    const v = String(opts[k] ?? cs.getPropertyValue('--lg-' + k)).trim(),
+      n = parseFloat(v);
     o[k] = v === '' ? DEFAULTS[k] : isNaN(n) ? v : n;
   }
   return [o, cs];
 }
 
 // Glass outside the viewport (plus a margin) drops its filter, so it costs nothing per frame.
-const onScreen = globalThis.IntersectionObserver && new IntersectionObserver(
-  entries => entries.forEach(e => e.target.glass?.show(e.isIntersecting)), { rootMargin: '25%' });
+const onScreen =
+  globalThis.IntersectionObserver &&
+  new IntersectionObserver(entries => entries.forEach(e => e.target.glass?.show(e.isIntersecting)), {
+    rootMargin: '25%',
+  });
 
 export function glass(el, opts = {}) {
   if (el.glass) return el.glass;
@@ -149,28 +209,47 @@ export function glass(el, opts = {}) {
   const filter = svg.appendChild(document.createElementNS(NS, 'filter'));
   filter.id = 'lg-' + ++uid;
   filter.setAttribute('color-interpolation-filters', 'sRGB'); // linearRGB would skew the map values
-  for (const [a, v] of [['x', 0], ['y', 0], ['width', 1], ['height', 1]]) filter.setAttribute(a, v); // default region is 144% of the area
+  for (const [a, v] of [
+    ['x', 0],
+    ['y', 0],
+    ['width', 1],
+    ['height', 1],
+  ])
+    filter.setAttribute(a, v); // default region is 144% of the area
   const fe = {}; // primitives by result name
-  let key, zoomed, shown = true;
+  let key,
+    zoomed,
+    shown = true;
   const show = () => el.style.setProperty('--lg-filter', shown ? `url(#${filter.id})` : 'none');
 
   const render = () => {
-    const [o, cs] = readOpts(el, opts), b = parseFloat(cs.borderLeftWidth), br = cs.borderTopLeftRadius;
-    const w = el.offsetWidth - b - parseFloat(cs.borderRightWidth), h = el.offsetHeight - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth);
+    const [o, cs] = readOpts(el, opts),
+      b = parseFloat(cs.borderLeftWidth),
+      br = cs.borderTopLeftRadius;
+    const w = el.offsetWidth - b - parseFloat(cs.borderRightWidth),
+      h = el.offsetHeight - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth);
     if (w <= 0 || h <= 0) return;
     const half = Math.min(w, h) / 2; // ::before covers the padding box, so radius and size are inner ones
-    o.radius = Math.max(0, Math.min(half, (br.endsWith('%') ? parseFloat(br) / 100 * Math.min(el.offsetWidth, el.offsetHeight) : parseFloat(br) || 0) - b));
+    o.radius = Math.max(
+      0,
+      Math.min(
+        half,
+        (br.endsWith('%') ? (parseFloat(br) / 100) * Math.min(el.offsetWidth, el.offsetHeight) : parseFloat(br) || 0) -
+          b,
+      ),
+    );
     if (o.bezel === 'auto') o.bezel = Math.max(10, o.radius * 0.8);
     o.bezel = Math.min(half, o.bezel);
     if (o.thickness === 'auto') o.thickness = o.bezel * 1.2;
-    if (o.zoom !== 1 !== zoomed) {
-      zoomed = o.zoom !== 1;
+    const z = o.zoom !== 1;
+    if (z !== zoomed) {
+      zoomed = z;
       filter.innerHTML = FILTER(zoomed);
       for (const n of filter.querySelectorAll('[result]')) fe[n.getAttribute('result')] = n;
       fe.slope = filter.querySelector('feFuncA');
       key = null;
     }
-    const res = Math.min(1, Math.max(.5, 16 / o.bezel)); // ~16 samples across the bezel is plenty
+    const res = Math.min(1, Math.max(0.5, 16 / o.bezel)); // ~16 samples across the bezel is plenty
     const k = [w, h, res, o.radius, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom].join();
     const m = mapsFor(k, () => {
       const r = computeMaps(w, h, o, res);
@@ -178,16 +257,26 @@ export function glass(el, opts = {}) {
     });
     if (k !== key) {
       key = k;
-      for (const [img, url] of [[fe.map, m.d], [fe.zmap, m.z]]) {
+      for (const [img, url] of [
+        [fe.map, m.d],
+        [fe.zmap, m.z],
+      ]) {
         if (!img) continue;
-        for (const [a, v] of [['x', 0], ['y', 0], ['width', w], ['height', h], ['href', url]]) img.setAttribute(a, v);
+        for (const [a, v] of [
+          ['x', 0],
+          ['y', 0],
+          ['width', w],
+          ['height', h],
+          ['href', url],
+        ])
+          img.setAttribute(a, v);
       }
     }
     fe.zoomed?.setAttribute('scale', m.zscale);
     // feDisplacementMap picks the nearest source pixel, so magnified content steps; a blur sized to the
     // magnification (in device px) smooths it like bilinear sampling would. Folded into the frost blur.
     // a zoom-wide pixel step needs σ ≈ 0.45 × zoom; Skia's CPU blur ignores σ under ~0.8 device px
-    const aa = o.zoom > 1 ? Math.max(.8, .45 * o.zoom) / (devicePixelRatio || 1) : 0;
+    const aa = o.zoom > 1 ? (Math.max(0.8, 0.45 * o.zoom) * o.antialias) / (devicePixelRatio || 1) : 0;
     fe.blur.setAttribute('stdDeviation', Math.hypot(o.blur, aa));
     fe.refracted.setAttribute('scale', m.scale * o.refraction);
     fe.saturated.setAttribute('values', o.saturation);
@@ -198,12 +287,24 @@ export function glass(el, opts = {}) {
   const ro = new ResizeObserver(render);
   ro.observe(el, { box: 'border-box' });
   onScreen?.observe(el);
-  return el.glass = {
+  return (el.glass = {
     filter, // the <filter> element, for inspection or extra primitives
-    update(o) { Object.assign(opts, o); render() },
-    show(v) { shown = v; show() },
-    destroy() { ro.disconnect(); onScreen?.unobserve(el); filter.remove(); el.style.removeProperty('--lg-filter'); delete el.glass },
-  };
+    update(o) {
+      Object.assign(opts, o);
+      render();
+    },
+    show(v) {
+      shown = v;
+      show();
+    },
+    destroy() {
+      ro.disconnect();
+      onScreen?.unobserve(el);
+      filter.remove();
+      el.style.removeProperty('--lg-filter');
+      delete el.glass;
+    },
+  });
 }
 
 // ---------------------------------------------------------------- components
@@ -214,7 +315,8 @@ const Base = globalThis.HTMLElement ?? class {}; // lets Node import the math fo
 function build(host, html) {
   host.innerHTML = html;
   const input = host.querySelector('input');
-  for (const a of host.getAttributeNames()) if (!['class', 'style', 'id'].includes(a)) input.setAttribute(a, host.getAttribute(a));
+  for (const a of host.getAttributeNames())
+    if (!['class', 'style', 'id'].includes(a)) input.setAttribute(a, host.getAttribute(a));
   return input;
 }
 
@@ -223,37 +325,57 @@ function build(host, html) {
 function onDrag(host, move, end) {
   host.addEventListener('pointerdown', e => {
     if (e.button || host.querySelector(':disabled')) return;
-    const t = e.target, x0 = e.clientX;
+    const t = e.target,
+      x0 = e.clientX;
     let dragged = false;
     t.setPointerCapture(e.pointerId); // on the pressed element, so a plain tap still clicks it
-    const mv = ev => (dragged ||= Math.abs(ev.clientX - x0) > 4) && move(ev);
+    const mv = ev => {
+      if ((dragged ||= Math.abs(ev.clientX - x0) > 4)) move(ev);
+    };
     const up = ev => {
-      for (const [type, fn] of [['pointermove', mv], ['pointerup', up], ['pointercancel', up]]) t.removeEventListener(type, fn);
+      for (const [type, fn] of [
+        ['pointermove', mv],
+        ['pointerup', up],
+        ['pointercancel', up],
+      ])
+        t.removeEventListener(type, fn);
       end(ev, dragged);
     };
-    for (const [type, fn] of [['pointermove', mv], ['pointerup', up], ['pointercancel', up]]) t.addEventListener(type, fn);
+    for (const [type, fn] of [
+      ['pointermove', mv],
+      ['pointerup', up],
+      ['pointercancel', up],
+    ])
+      t.addEventListener(type, fn);
   });
 }
 
 // Mouse click follows pointerup in the same task; the timeout disarms before any later click.
 function swallowClick(el) {
-  const eat = e => { e.preventDefault(); e.stopImmediatePropagation() };
+  const eat = e => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
   el.addEventListener('click', eat, true);
   setTimeout(() => el.removeEventListener('click', eat, true));
 }
 
 // Squash & stretch from horizontal speed, relaxing once movement stops. Feed it pointer x.
 function jelly(el) {
-  let s = 0, x0, t0, raf = 0;
+  let s = 0,
+    x0,
+    t0,
+    raf = 0;
   const tick = () => {
     s *= 0.82;
-    el.style.transform = s > .004 ? `scale(${1 + s}, ${1 - s / 2})` : '';
-    raf = s > .004 ? requestAnimationFrame(tick) : 0;
+    el.style.transform = s > 0.004 ? `scale(${1 + s}, ${1 - s / 2})` : '';
+    raf = s > 0.004 ? requestAnimationFrame(tick) : 0;
   };
   return x => {
     const t = performance.now();
-    if (t > t0) s = Math.min(.22, Math.max(s, Math.abs(x - x0) / (t - t0) * .05));
-    x0 = x; t0 = t;
+    if (t > t0) s = Math.min(0.22, Math.max(s, (Math.abs(x - x0) / (t - t0)) * 0.05));
+    x0 = x;
+    t0 = t;
     raf ||= requestAnimationFrame(tick);
   };
 }
@@ -264,51 +386,75 @@ class LgSwitch extends Base {
     this.input = build(this, '<input type="checkbox" role="switch"><span class="lg-thumb" data-glass></span>');
     const squish = jelly(this.querySelector('.lg-thumb'));
     let f = 0;
-    onDrag(this, e => {
-      const r = this.getBoundingClientRect();
-      f = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width - 1 / 3) * 3)); // thumb centre runs from 1/3 to 2/3
-      this.style.setProperty('--lg-f', f);
-      this.toggleAttribute('data-dragging', true);
-      squish(e.clientX);
-    }, (e, dragged) => {
-      this.removeAttribute('data-dragging');
-      this.style.removeProperty('--lg-f');
-      if (!dragged || e.type !== 'pointerup') return;
-      if (f > .5 !== this.input.checked) this.input.click(); // native toggle, fires input + change
-      swallowClick(this);
-    });
+    onDrag(
+      this,
+      e => {
+        const r = this.getBoundingClientRect();
+        f = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width - 1 / 3) * 3)); // thumb centre runs from 1/3 to 2/3
+        this.style.setProperty('--lg-f', f);
+        this.toggleAttribute('data-dragging', true);
+        squish(e.clientX);
+      },
+      (e, dragged) => {
+        this.removeAttribute('data-dragging');
+        this.style.removeProperty('--lg-f');
+        if (!dragged || e.type !== 'pointerup') return;
+        if (f > 0.5 !== this.input.checked) this.input.click(); // native toggle, fires input + change
+        swallowClick(this);
+      },
+    );
   }
-  get checked() { return this.input.checked }
-  set checked(v) { this.input.checked = v }
+  get checked() {
+    return this.input.checked;
+  }
+  set checked(v) {
+    this.input.checked = v;
+  }
 }
 
 class LgSlider extends Base {
   connectedCallback() {
     if (this.input) return;
-    this.input = build(this, '<input type="range"><span class="lg-track"><span class="lg-fill"></span></span><span class="lg-thumb" data-glass></span>');
+    this.input = build(
+      this,
+      '<input type="range"><span class="lg-track"><span class="lg-fill"></span></span><span class="lg-thumb" data-glass></span>',
+    );
     const squish = jelly(this.querySelector('.lg-thumb'));
     this.input.addEventListener('input', () => squish(this.sync() * this.offsetWidth));
     this.sync();
   }
   sync() {
-    const i = this.input, min = +i.min || 0, max = i.max === '' ? 100 : +i.max, p = (i.value - min) / (max - min);
+    const i = this.input,
+      min = +i.min || 0,
+      max = i.max === '' ? 100 : +i.max,
+      p = (i.value - min) / (max - min);
     this.style.setProperty('--p', p);
     return p;
   }
-  get value() { return this.input.value }
-  set value(v) { this.input.value = v; this.sync() }
+  get value() {
+    return this.input.value;
+  }
+  set value(v) {
+    this.input.value = v;
+    this.sync();
+  }
 }
 
 // Children (buttons or links) become equal-width segments with a glass indicator you can tap or drag.
 class LgSegmented extends Base {
-  get items() { return [...this.children].filter(c => c !== this.ind) }
+  get items() {
+    return [...this.children].filter(c => c !== this.ind);
+  }
   connectedCallback() {
     if (this.ind) return;
     this.ind = this.appendChild(document.createElement('span'));
     this.ind.className = 'lg-indicator';
     this.ind.dataset.glass = '';
     if (this.items[0]?.tagName !== 'A') this.role = 'tablist';
-    this.addEventListener('click', e => { const i = this.items.findIndex(c => c.contains(e.target)); if (i >= 0) this.select(i, true) });
+    this.addEventListener('click', e => {
+      const i = this.items.findIndex(c => c.contains(e.target));
+      if (i >= 0) this.select(i, true);
+    });
     this.addEventListener('keydown', e => {
       const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
       if (!d || this.role !== 'tablist') return;
@@ -320,29 +466,48 @@ class LgSegmented extends Base {
     this.ind.addEventListener('transitionend', e => e.propertyName === 'translate' && this.settle());
     const squish = jelly(this.ind);
     let f = 0;
-    onDrag(this, e => {
-      const r = this.getBoundingClientRect(), pad = parseFloat(getComputedStyle(this).paddingLeft), n = this.items.length;
-      f = Math.max(0, Math.min(n - 1, (e.clientX - r.left - pad) / (r.width - 2 * pad) * n - .5));
-      this.style.setProperty('--i', f);
-      this.toggleAttribute('data-dragging', true);
-      this.toggleAttribute('data-moving', true);
-      squish(e.clientX);
-    }, (e, dragged) => {
-      if (!dragged) return;
-      this.removeAttribute('data-dragging');
-      if (e.type !== 'pointerup') return this.select(this.index); // cancelled: glide back
-      this.items[Math.round(f)].click(); // same path as a tap: selects, follows links, runs your handlers
-      swallowClick(this);
-    });
-    this.select(Math.max(0, this.items.findIndex(c => c.matches('[aria-current=page],[aria-selected=true]'))));
+    onDrag(
+      this,
+      e => {
+        const r = this.getBoundingClientRect(),
+          pad = parseFloat(getComputedStyle(this).paddingLeft),
+          n = this.items.length;
+        f = Math.max(0, Math.min(n - 1, ((e.clientX - r.left - pad) / (r.width - 2 * pad)) * n - 0.5));
+        this.style.setProperty('--i', f);
+        this.toggleAttribute('data-dragging', true);
+        this.toggleAttribute('data-moving', true);
+        squish(e.clientX);
+      },
+      (e, dragged) => {
+        if (!dragged) return;
+        this.removeAttribute('data-dragging');
+        if (e.type !== 'pointerup') return this.select(this.index); // cancelled: glide back
+        this.items[Math.round(f)].click(); // same path as a tap: selects, follows links, runs your handlers
+        swallowClick(this);
+      },
+    );
+    this.select(
+      Math.max(
+        0,
+        this.items.findIndex(c => c.matches('[aria-current=page],[aria-selected=true]')),
+      ),
+    );
   }
-  settle() { if (!this.hasAttribute('data-dragging')) this.removeAttribute('data-moving') }
+  settle() {
+    if (!this.hasAttribute('data-dragging')) this.removeAttribute('data-moving');
+  }
   select(i, fromUser) {
     const items = this.items;
     i = Math.max(0, Math.min(items.length - 1, i));
     items.forEach((c, j) => {
-      if (c.tagName === 'A') { j === i ? c.setAttribute('aria-current', 'page') : c.removeAttribute('aria-current'); return }
-      c.role = 'tab'; c.ariaSelected = j === i; c.tabIndex = j === i ? 0 : -1;
+      if (c.tagName === 'A') {
+        if (j === i) c.setAttribute('aria-current', 'page');
+        else c.removeAttribute('aria-current');
+        return;
+      }
+      c.role = 'tab';
+      c.ariaSelected = j === i;
+      c.tabIndex = j === i ? 0 : -1;
     });
     this.style.setProperty('--n', items.length);
     this.style.setProperty('--i', i);
@@ -354,12 +519,18 @@ class LgSegmented extends Base {
     this.t = setTimeout(() => this.settle(), 700); // in case no translate transition runs
     this.index = i;
   }
-  get value() { return this.index }
-  set value(i) { this.select(i) }
+  get value() {
+    return this.index;
+  }
+  set value(i) {
+    this.select(i);
+  }
 }
 
 const CSS = `
-${Object.keys(DEFAULTS).map(k => `@property --lg-${k} { syntax: '*'; inherits: false; }`).join('\n')}
+${Object.keys(DEFAULTS)
+  .map(k => `@property --lg-${k} { syntax: '*'; inherits: false; }`)
+  .join('\n')}
 @property --lg-f { syntax: '<number>'; inherits: true; initial-value: 0; }
 @layer liquid-glass {
 :root {
@@ -397,7 +568,7 @@ ${Object.keys(DEFAULTS).map(k => `@property --lg-${k} { syntax: '*'; inherits: f
   display: flex; align-items: center; gap: .6em; height: 2.75em; padding: 0 1.1em; border-radius: 999px; cursor: text;
   transition: background-color .25s, outline-color .25s; outline: 1px solid transparent;
   &:focus-within { --lg-tint: light-dark(rgb(255 255 255 / .4), rgb(255 255 255 / .12)); outline-color: light-dark(rgb(0 0 0 / .12), rgb(255 255 255 / .3)); }
-  & input { all: unset; flex: 1; min-width: 0; }
+  & input { all: unset; flex: 1; min-width: 0; outline: none !important; } /* the field shows focus; beats any page-wide :focus outline */
   & svg { width: 1.1em; height: 1.1em; opacity: .6; flex: none; }
 }
 
@@ -509,11 +680,19 @@ if (globalThis.document) {
   };
   new MutationObserver(records => {
     for (const r of records) {
-      if (r.type === 'attributes') r.target.hasAttribute('data-glass') ? glass(r.target) : r.target.glass?.destroy();
+      if (r.type === 'attributes') {
+        if (r.target.hasAttribute('data-glass')) glass(r.target);
+        else r.target.glass?.destroy();
+      }
       r.removedNodes.forEach(n => scan(n, el => el.glass?.destroy()));
       r.addedNodes.forEach(n => n.isConnected && scan(n, el => glass(el)));
     }
-  }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-glass'] });
+  }).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['data-glass'],
+  });
   scan(document.documentElement, el => glass(el));
   document.addEventListener('click', e => e.target.closest?.('.lg-menu > :is(button, a)')?.parentElement.hidePopover());
 }
