@@ -50,4 +50,11 @@ const zm = computeMaps(90, 40, { ...o, zoom: 2 }, 1, blobs),
   zr = x => zm.zmap[((10 >> 2) * zm.ZW + (x >> 2)) * 4];
 assert(zr(8) > 128 && zr(32) < 128 && zr(58) > 128 && zr(82) < 128, 'each shape magnifies around its own centre');
 
+// a neighbour past the blend (gap 10 > 2 pads at merge 8) must not pull a shape's zoom centre at all
+const zo = { ...o, zoom: 2, merge: 8, side: 40 },
+  one = computeMaps(40, 40, zo, 1, [blobs[0]]),
+  two = computeMaps(92, 40, zo, 1, blobs), // 92 wide: the same 4px zoom grid as 40
+  cols = (m, n) => Array.from({ length: m.ZH }, (_, y) => [...m.zmap.subarray(y * m.ZW * 4, (y * m.ZW + n) * 4)]);
+assert.deepEqual(cols(two, one.ZW), cols(one, one.ZW), 'a shape out of reach leaves the zoom alone');
+
 console.log('ok, max displacement', scale.toFixed(1), 'px');

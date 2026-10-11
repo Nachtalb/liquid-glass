@@ -203,7 +203,8 @@ export function computeMaps(w, h, o, res = 1, shapes) {
   // so a quarter of the map's resolution still does.
   const z = 1 - 1 / zoom,
     zmax =
-      (shapes ? Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + pad : Math.max(w, h) / 2) * Math.abs(z) || 1;
+      (shapes ? (o.side ?? Math.max(...shapes.flatMap(s => [s.w, s.h]))) / 2 + pad : Math.max(w, h) / 2) *
+        Math.abs(z) || 1;
   const ZW = z ? (shapes ? Math.max(2, Math.ceil(W / 4)) : Math.min(32, W)) : 0,
     ZH = z ? (shapes ? Math.max(2, Math.ceil(H / 4)) : Math.min(32, H)) : 0,
     zmap = z ? new Uint8ClampedArray(ZW * ZH * 4) : null;
@@ -218,13 +219,13 @@ export function computeMaps(w, h, o, res = 1, shapes) {
         let sum = 0;
         cx = cy = 0;
         for (const s of shapes) {
-          const q = Math.exp(-Math.max(0, sdRect(X, Y, s)) / pad); // 1 inside, fading with distance
+          // 1 inside, easing to exactly 0 two pads out: a neighbour that isn't merging can't pull the centre
+          const q = Math.max(0, 1 - Math.max(0, sdRect(X, Y, s)) / (2 * pad)) ** 2;
           sum += q;
           cx += q * (s.x + s.w / 2);
           cy += q * (s.y + s.h / 2);
         }
-        cx /= sum;
-        cy /= sum;
+        [cx, cy] = sum ? [cx / sum, cy / sum] : [X, Y]; // out of every shape's reach: no zoom, it's cut away
       }
       zmap[i] = 128 - (((X - cx) * z) / zmax) * 127;
       zmap[i + 1] = 128 - (((Y - cy) * z) / zmax) * 127;
@@ -307,8 +308,9 @@ void main() {
   if (mode == 1) { // zoom: towards each shape's own centre, blended where they merge
     vec2 c = vec2(0);
     float sum = 0.;
-    for (int i = 0; i < n; i++) { float q = exp(-max(0., sd(i, p, g)) / pad); sum += q; c += q * box[i].xy; }
-    o = vec4((128. - (p - c / sum) * z / zmax * 127.) / 255., 128. / 255., 1);
+    for (int i = 0; i < n; i++) { float q = max(0., 1. - max(0., sd(i, p, g)) / (2. * pad)); sum += q * q; c += q * q * box[i].xy; }
+    c = sum > 0. ? c / sum : p;
+    o = vec4((128. - (p - c) * z / zmax * 127.) / 255., 128. / 255., 1);
     return;
   }
   float d = 0.;
@@ -367,7 +369,7 @@ function glMaps(w, h, o, res, shapes) {
     k = o.merge || 1e-6,
     pad = k / 4 + 2,
     z = 1 - 1 / o.zoom,
-    zmax = (Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + pad) * Math.abs(z) || 1,
+    zmax = (o.side / 2 + pad) * Math.abs(z) || 1,
     box = new Float32Array(32);
   shapes.forEach((s, i) => box.set([s.x + s.w / 2, s.y + s.h / 2, s.w / 2, s.h / 2], i * 4));
   gl.uniform2f(U.size, w, h);
@@ -495,9 +497,15 @@ export function glass(el, opts = {}) {
     let m;
     if (shapes) {
       // Shapes carry the outline in the map, so they render per device pixel to stay crisp, moving or not, within
-      // ~100k pixels (feImage pixels are re-sent every frame). Fixed levels, so it never drifts.
-      const res = LEVELS.find(l => l <= (devicePixelRatio || 1) && l * l * w * h <= 1e5) ?? 1 / 2,
-        k = [w, h, res, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom, o.merge]
+      // ~150k pixels for the largest shape (feImage pixels are re-sent every frame), on fixed levels so it never
+      // drifts. Level and zoom scale come from the largest side and area of the whole group (opts.size: every pane
+      // of an lg-merge), so a shape renders the same alone as next to another.
+      const [side, area] = opts.size?.() ?? [
+          Math.max(...shapes.flatMap(s => [s.w, s.h])),
+          Math.max(...shapes.map(s => s.w * s.h)),
+        ],
+        res = LEVELS.find(l => l <= (devicePixelRatio || 1) && l * l * area <= 1.5e5) ?? 1 / 2,
+        k = [w, h, res, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom, o.merge, (o.side = side)]
           .concat(shapes.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(v => Math.round(v * 4))))
           .join();
       m = {
@@ -1100,6 +1108,10 @@ class LgMerge extends Base {
         k = opts.merge ?? (parseFloat(getComputedStyle(this).getPropertyValue('--lg-merge')) || 20),
         p = k / 4 + 2, // the union reaches k/4 past a shape, plus its antialiased edge
         near = k * 1.25 + 2 + p, // closer than this, the union between two shapes can change
+        q = v => Math.round(v * 100) / 100, // else float noise (175.99997 wide) reads as a change on every move
+        // whole device pixels too, or each grid step lands on another subpixel (8px at 110% is 8.8)
+        D = devicePixelRatio || 1,
+        G = Array.from({ length: 10 }, (_, i) => 8 * i + 8).find(g => Math.abs(g * D - Math.round(g * D)) < 0.01) ?? 8,
         rects = kids.map(c => {
           const b = c.getBoundingClientRect(),
             br = getComputedStyle(c).borderTopLeftRadius,
@@ -1114,34 +1126,44 @@ class LgMerge extends Base {
         }),
         up = rects.map((_, i) => i),
         top = i => (up[i] === i ? i : (up[i] = top(up[i])));
+      // the real gap between two rounded rects: between their inner rects, less both radii (not the boxes, which
+      // put diagonal neighbours in one pane long before their union can change)
+      const gap = (a, b) =>
+        Math.hypot(
+          Math.max(0, Math.abs(a.x + a.w / 2 - b.x - b.w / 2) - (a.w + b.w) / 2 + a.r + b.r),
+          Math.max(0, Math.abs(a.y + a.h / 2 - b.y - b.h / 2) - (a.h + b.h) / 2 + a.r + b.r),
+        ) -
+        a.r -
+        b.r;
       for (let i = 0; i < rects.length; i++)
-        for (let j = i + 1; j < rects.length; j++) {
-          const a = rects[i],
-            b = rects[j];
-          if (
-            Math.abs(a.x + a.w / 2 - b.x - b.w / 2) - (a.w + b.w) / 2 < near &&
-            Math.abs(a.y + a.h / 2 - b.y - b.h / 2) - (a.h + b.h) / 2 < near
-          )
-            up[top(i)] = top(j);
-        }
-      const live = new Set();
+        for (let j = i + 1; j < rects.length; j++) if (gap(rects[i], rects[j]) < near) up[top(i)] = top(j);
+      // the largest side and area of all children: every pane renders at one level and zoom scale
+      this.size = [Math.max(...rects.flatMap(r => [q(r.w), q(r.h)])), Math.max(...rects.map(r => q(r.w * r.h)))];
+      const live = new Set(),
+        prev = this.rects;
+      this.rects = rects;
       for (const members of Object.values(Object.groupBy(rects.keys(), i => top(i)))) {
         const id = members.join(),
-          g = members.map(i => rects[i]),
-          x = Math.min(...g.map(s => s.x)) - p,
-          y = Math.min(...g.map(s => s.y)) - p,
-          q = v => Math.round(v * 100) / 100, // else float noise (175.99997 wide) reads as a change on every move
-          shapes = g.map(s => ({ x: q(s.x - x), y: q(s.y - y), w: q(s.w), h: q(s.h), r: q(s.r) })),
-          w = q(Math.max(...g.map(s => s.x + s.w)) + p - x),
-          h = q(Math.max(...g.map(s => s.y + s.h)) + p - y),
-          shape = JSON.stringify([w, h, shapes]);
+          g = members.map(i => rects[i]);
         let pane = this.panes.get(id);
         if (!pane) {
           pane = Object.assign(document.createElement('div'), { className: 'lg-pane' });
-          glass(pane, { ...opts, source: this, shapes: () => pane.shapes });
+          glass(pane, { ...opts, source: this, shapes: () => pane.shapes, size: () => this.size });
           this.append(pane); // last, so authors' :first-child / :nth-child still count their own children
           this.panes.set(id, pane);
+          // A cluster re-renders whenever one member moves, so it sits on a grid of G px (whole map and device
+          // pixels) running through the box a member that held still had alone: that member renders exactly as it
+          // did alone, as long as it holds still. A lone child keeps its exact box, so moving it just moves its pane.
+          const i = members.find(i => prev?.[i]?.x === rects[i].x && prev[i].y === rects[i].y) ?? members[0];
+          pane.at = [rects[i].x - p, rects[i].y - p];
         }
+        const snap = (v, axis, round) => (g.length > 1 ? pane.at[axis] + round((v - pane.at[axis]) / G) * G : v),
+          x = snap(Math.min(...g.map(s => s.x)) - p, 0, Math.floor),
+          y = snap(Math.min(...g.map(s => s.y)) - p, 1, Math.floor),
+          shapes = g.map(s => ({ x: q(s.x - x), y: q(s.y - y), w: q(s.w), h: q(s.h), r: q(s.r) })),
+          w = q(snap(Math.max(...g.map(s => s.x + s.w)) + p, 0, Math.ceil) - x),
+          h = q(snap(Math.max(...g.map(s => s.y + s.h)) + p, 1, Math.ceil) - y),
+          shape = JSON.stringify([w, h, shapes, this.size]);
         live.add(id);
         pane.style.translate = `${x}px ${y}px`; // a lone child moving only moves its pane
         if (shape === pane.shape) continue;
