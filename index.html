@@ -485,6 +485,25 @@
         text-transform: uppercase;
         cursor: context-menu;
       }
+      .card lg-dock > button {
+        color: #fff;
+        background: var(--tile);
+        &:nth-child(1) {
+          --tile: #ff9f0a;
+        }
+        &:nth-child(2) {
+          --tile: #ff375f;
+        }
+        &:nth-child(3) {
+          --tile: #0a84ff;
+        }
+        &:nth-child(4) {
+          --tile: #30d158;
+        }
+        &:nth-child(5) {
+          --tile: #5e5ce6;
+        }
+      }
       .lg-sheet header {
         display: flex;
         align-items: center;
@@ -754,6 +773,56 @@
           </article>
 
           <article class="card">
+            <div class="stage paper" style="--x: -200px; --y: -60px" data-snippet>
+              <lg-dock data-glass>
+                <button aria-label="Camera">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+                    <rect x="3" y="7" width="18" height="13" rx="3" />
+                    <circle cx="12" cy="13.5" r="3.5" />
+                    <path d="m9 7 1.5-2.5h3L15 7" />
+                  </svg>
+                </button>
+                <button aria-label="Photos">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <rect x="3" y="5" width="18" height="14" rx="3" />
+                    <path d="m3 16 5-5 4 4 3-3 6 6" />
+                  </svg>
+                </button>
+                <button aria-label="Albums">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <rect x="4" y="4" width="7" height="7" rx="2" />
+                    <rect x="13" y="4" width="7" height="7" rx="2" />
+                    <rect x="4" y="13" width="7" height="7" rx="2" />
+                    <rect x="13" y="13" width="7" height="7" rx="2" />
+                  </svg>
+                </button>
+                <button aria-label="Exposure">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="4" />
+                    <path
+                      d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+                    />
+                  </svg>
+                </button>
+                <button aria-label="Search">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.5-3.5" />
+                  </svg>
+                </button>
+              </lg-dock>
+            </div>
+            <div class="meta">
+              <h3>Dock</h3>
+              <p>
+                A magnifying lens follows the pointer along the icons, or follows keyboard focus. On touch, slide a
+                finger along the dock.
+              </p>
+              <pre><code></code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage" style="--x: -60px; --y: -600px" data-snippet>
               <button class="lg-btn lg-round" data-glass interestfor="tip-add" aria-label="Add">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -919,7 +988,7 @@
               <h3>Tab bar &amp; pill nav</h3>
               <p>
                 The same element with <code>.lg-tabbar</code>. Give it links instead of buttons for page navigation
-                (<code>aria-current</code>), like the dock at the bottom of this page.
+                (<code>aria-current</code>), like the nav bar at the bottom of this page.
               </p>
               <pre><code></code></pre>
             </div>
@@ -1271,6 +1340,13 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
                   </td>
                 </tr>
                 <tr>
+                  <td>&lt;lg-dock&gt;</td>
+                  <td>
+                    Buttons or links as icons; a magnifying lens follows the pointer and keyboard focus along them. Tune
+                    it with <code>--lg-zoom</code> on <code>lg-dock .lg-lens</code>.
+                  </td>
+                </tr>
+                <tr>
                   <td>.lg-btn</td>
                   <td>Variants <code>.lg-round</code> and <code>.lg-tinted</code></td>
                 </tr>
@@ -1345,14 +1421,14 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">34.0 KB</span> · <span data-size="gzip">10.6 KB</span> gzipped</small
+                >Minified · <span data-size="min">35.5 KB</span> · <span data-size="gzip">10.9 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">49.7 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">51.6 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">10.6 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">10.9 KB</span> gzipped.</span>
         </div>
       </section>
     </main>
