@@ -527,6 +527,45 @@ class LgSegmented extends Base {
   }
 }
 
+// Banner that slides down from the top. Content is a string or a node; duration in ms, 0 keeps it up.
+// Swipe it up to dismiss. One persistent role="status" element, so screen readers announce each toast.
+let toaster;
+export function toast(content, { duration = 4000 } = {}) {
+  const first = !toaster;
+  if (first) {
+    toaster = Object.assign(document.createElement('div'), {
+      className: 'lg-toast',
+      popover: 'manual',
+      role: 'status',
+    });
+    toaster.dataset.glass = '';
+    document.body.append(toaster);
+    toaster.addEventListener('pointerdown', e => {
+      const y0 = e.clientY,
+        move = ev => (toaster.style.translate = `0 ${Math.min(0, ev.clientY - y0)}px`);
+      toaster.setPointerCapture(e.pointerId);
+      toaster.toggleAttribute('data-dragging', true);
+      toaster.addEventListener('pointermove', move);
+      toaster.addEventListener(
+        'pointerup',
+        ev => {
+          toaster.removeEventListener('pointermove', move);
+          toaster.removeAttribute('data-dragging');
+          toaster.style.translate = '';
+          if (ev.clientY - y0 < -24) toaster.hidePopover();
+        },
+        { once: true },
+      );
+    });
+  }
+  const fill = () => toaster.replaceChildren(content);
+  if (first) requestAnimationFrame(fill); // a live region only announces changes made after it exists
+  else fill();
+  if (!toaster.matches(':popover-open')) toaster.showPopover();
+  clearTimeout(toaster.timer);
+  if (duration) toaster.timer = setTimeout(() => toaster.hidePopover(), duration);
+}
+
 const ICON = d =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="${d}"/></svg>`;
 
@@ -813,8 +852,18 @@ lg-dots {
   &:popover-open { scale: 1; transition: scale .4s var(--lg-spring), display .4s allow-discrete, overlay .4s allow-discrete; }
   @starting-style { &:popover-open { scale: .5; } }
 }
+.lg-toast {
+  position: fixed; inset: max(.75em, env(safe-area-inset-top)) 0 auto; margin: 0 auto; border: 0; padding: .8em 1.25em; border-radius: 1.4em;
+  min-height: 1.2em; max-width: min(26em, calc(100vw - 1.5em)); touch-action: none; user-select: none; cursor: grab;
+  --lg-blur: 4; --lg-tint: light-dark(rgb(250 250 252 / .6), rgb(30 31 35 / .6)); color: light-dark(#111, #f4f4f5);
+  translate: 0 calc(-100% - 1.5em);
+  transition: translate .3s cubic-bezier(.4, 0, 1, 1), display .3s allow-discrete, overlay .3s allow-discrete;
+  &:popover-open { translate: 0; transition: translate .55s var(--lg-spring), display .55s allow-discrete, overlay .55s allow-discrete; }
+  @starting-style { &:popover-open { translate: 0 calc(-100% - 1.5em); } }
+  &[data-dragging] { transition: none; cursor: grabbing; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .lg-btn, .lg-menu, .lg-tip, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
+  .lg-btn, .lg-menu, .lg-tip, .lg-toast, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots * { transition-duration: 0s !important; }
 }
 }`;
 

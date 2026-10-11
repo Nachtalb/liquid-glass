@@ -927,6 +927,23 @@
           </article>
 
           <article class="card">
+            <div class="stage" style="--x: -60px; --y: -600px">
+              <button class="lg-btn lg-tinted" data-glass id="toast-btn">Show a toast</button>
+            </div>
+            <div class="meta">
+              <h3>Toast</h3>
+              <p>
+                Slides in from the top and leaves after four seconds. Swipe it up to dismiss. Screen readers announce
+                it.
+              </p>
+              <pre><code>import { toast } from './liquid-glass.min.js';
+
+toast('Lens 2 is back in spec');
+toast(node, { duration: 0 }); // stays until swiped away</code></pre>
+            </div>
+          </article>
+
+          <article class="card">
             <div class="stage paper" style="--x: -610px; --y: -90px" data-snippet>
               <div class="orb" data-glass style="--lg-zoom: 1.8; --lg-profile: circle"></div>
               <span data-glass style="border-radius: 14px; padding: 8px 14px; --lg-blur: 3">Any element</span>
@@ -1126,6 +1143,13 @@
                   </td>
                 </tr>
                 <tr>
+                  <td>toast(content, opts)</td>
+                  <td>
+                    Banner from the top. <code>content</code> is a string or node; <code>{ duration }</code> in ms
+                    (default 4000, <code>0</code> keeps it up). Swipe up to dismiss.
+                  </td>
+                </tr>
+                <tr>
                   <td>[data-contextmenu]</td>
                   <td>Right-click or long-press inside opens the <code>.lg-menu</code> with that id at the pointer.</td>
                 </tr>
@@ -1166,14 +1190,14 @@
             <a href="liquid-glass.min.js" download
               >liquid-glass.min.js
               <small
-                >Minified · <span data-size="min">25.4 KB</span> · <span data-size="gzip">8.5 KB</span> gzipped</small
+                >Minified · <span data-size="min">27.0 KB</span> · <span data-size="gzip">8.9 KB</span> gzipped</small
               ></a
             >
             <a href="liquid-glass.js" download
-              >liquid-glass.js <small>Readable source · <span data-size="src">37.8 KB</span></small></a
+              >liquid-glass.js <small>Readable source · <span data-size="src">40.1 KB</span></small></a
             >
           </div>
-          <span class="size">One ES module, no dependencies, <span data-size="gzip">8.5 KB</span> gzipped.</span>
+          <span class="size">One ES module, no dependencies, <span data-size="gzip">8.9 KB</span> gzipped.</span>
         </div>
       </section>
     </main>
@@ -1229,7 +1253,7 @@
     </script>
 
     <script type="module">
-      import { glass } from './liquid-glass.min.js';
+      import { glass, toast } from './liquid-glass.min.js';
       const $ = s => document.querySelector(s);
 
       // Test charts: Siemens star, USAF-1951-style bar groups, a 24-patch colour checker, a grey wedge, a grating.
@@ -1390,6 +1414,9 @@
           once: true,
         });
       });
+
+      // Toast card
+      $('#toast-btn').addEventListener('click', () => toast('Lens 2 is back in spec · 0.04 λ RMS'));
 
       // Stepper card shows its value
       $('lg-stepper[name=guests]').addEventListener('input', e => ($('#guests').value = e.target.value));
