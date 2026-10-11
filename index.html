@@ -15,6 +15,13 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
     />
+    <script>
+      // restore a theme picked with the toggle before first paint, so there's no flash
+      try {
+        const t = localStorage.getItem('theme');
+        if (t) document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
     <style>
       /* Layout: an optical bench. Printed test charts are the backdrop, glass sits on top, specimen cards follow. */
       :root {
@@ -1416,6 +1423,9 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
             ? root.dataset.theme === 'dark'
             : matchMedia('(prefers-color-scheme: dark)').matches;
         root.dataset.theme = dark ? 'light' : 'dark';
+        try {
+          localStorage.setItem('theme', root.dataset.theme);
+        } catch {}
       });
 
       // Filter cards from the top bar search
