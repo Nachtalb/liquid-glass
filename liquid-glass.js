@@ -765,27 +765,26 @@ class LgPicker extends Base {
   }
 }
 
-// Dock: a magnifying lens follows the pointer, or keyboard focus, along a row of icons.
-class LgDock extends Base {
+// Magnifier: a zoom lens follows the pointer, or keyboard focus, over whatever it wraps.
+class LgMagnifier extends Base {
   connectedCallback() {
     if (this.lens) return;
     const lens = (this.lens = Object.assign(document.createElement('div'), { className: 'lg-lens' })),
       wobble = jelly(lens);
     lens.dataset.glass = '';
     this.append(lens);
-    const at = x => {
+    const at = (x, y) => {
       const r = this.getBoundingClientRect();
-      x = Math.max(0, Math.min(r.width, x - r.left));
-      lens.style.translate = `${x - lens.offsetWidth / 2}px -50%`;
+      lens.style.translate = `${x - r.left - lens.offsetWidth / 2}px ${y - r.top - lens.offsetHeight / 2}px`;
       wobble(x);
       this.toggleAttribute('data-lens', true);
     };
     const hide = () => this.removeAttribute('data-lens');
-    this.addEventListener('pointermove', e => at(e.clientX));
+    this.addEventListener('pointermove', e => at(e.clientX, e.clientY));
     this.addEventListener('pointerleave', hide);
     this.addEventListener('focusin', e => {
       const r = e.target.getBoundingClientRect();
-      at(r.left + r.width / 2);
+      at(r.left + r.width / 2, r.top + r.height / 2);
     });
     this.addEventListener('focusout', hide);
   }
@@ -973,16 +972,11 @@ lg-picker {
   & .lg-big > div { font-size: 1.2em; height: calc(2em / 1.2); line-height: calc(2em / 1.2); }
 }
 @keyframes lg-wheel { to { translate: 0 calc((1 - var(--lg-n)) * 2em); } }
-lg-dock {
-  position: relative; display: inline-flex; align-items: center; gap: .4em; padding: .45em; border-radius: 1.5em; vertical-align: middle; touch-action: pan-y;
-  & > :is(a, button) {
-    all: unset; display: grid; place-items: center; width: 2.6em; height: 2.6em; border-radius: .8em; cursor: pointer;
-    &:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
-  }
-  & :is(svg, img) { width: 1.5em; height: 1.5em; }
+lg-magnifier {
+  position: relative; display: inline-block; vertical-align: middle; touch-action: pan-y;
   & .lg-lens {
-    --lg-zoom: 1.35; --lg-bezel: 12; --lg-blur: 0; /* narrow bezel: a flat magnifier, so icons stay undistorted */
-    position: absolute; top: 50%; left: 0; height: 150%; aspect-ratio: 1; border-radius: 50%; z-index: 1; pointer-events: none;
+    --lg-zoom: 1.4; --lg-bezel: 12; --lg-blur: 0; /* narrow bezel: a flat magnifier, so the content stays undistorted */
+    position: absolute; top: 0; left: 0; width: 5em; height: 5em; border-radius: 50%; z-index: 1; pointer-events: none;
     background: rgb(255 255 255 / .04); scale: 0; transition: scale .2s ease-in;
   }
   &[data-lens] .lg-lens { scale: 1; transition: scale .5s var(--lg-spring); }
@@ -1056,7 +1050,7 @@ lg-dock {
   &::after { content: ''; position: absolute; top: .6em; left: 50%; width: 2.5em; height: .3em; translate: -50%; border-radius: 1em; background: currentColor; opacity: .25; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lg-btn, .lg-menu, .lg-tip, .lg-toast, .lg-alert, .lg-sheet, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots *, lg-dock * { transition-duration: 0s !important; }
+  .lg-btn, .lg-menu, .lg-tip, .lg-toast, .lg-alert, .lg-sheet, .lg-toolbar > *, lg-switch, lg-switch *, lg-slider *, lg-segmented *, lg-stepper *, lg-dots *, lg-magnifier * { transition-duration: 0s !important; }
 }
 }`;
 
@@ -1070,7 +1064,7 @@ if (globalThis.document) {
   customElements.define('lg-stepper', LgStepper);
   customElements.define('lg-dots', LgDots);
   customElements.define('lg-picker', LgPicker);
-  customElements.define('lg-dock', LgDock);
+  customElements.define('lg-magnifier', LgMagnifier);
 
   const scan = (node, fn) => {
     if (node.nodeType !== 1) return;
