@@ -97,13 +97,8 @@ export function computeMaps(
     ly = Math.sin((light * Math.PI) / 180);
   const k = merge || 1e-6,
     pad = k / 4 + 2, // the union reaches at most k/4 past a shape; 2px more for the antialiased edge
-    near = shapes?.map(s => [s.x - pad, s.y - pad, s.x + s.w + pad, s.y + s.h + pad]),
-    sdf = (px, py) =>
-      shapes.reduce((d, s) => {
-        const b = sdRect(px, py, s),
-          m = Math.max(k - Math.abs(d - b), 0) / k;
-        return Math.min(d, b) - (m * m * k) / 4; // polynomial smooth min
-      }, Infinity);
+    reach = k * 1.25 + 2, // past this a shape can't move the union's edge (needs d < k/4 + 1 within k of it)
+    S = shapes?.map(s => ({ cx: s.x + s.w / 2, cy: s.y + s.h / 2, hw: s.w / 2, hh: s.h / 2, r: s.r }));
   const dmap = new Uint8ClampedArray(W * H * 4);
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
@@ -115,16 +110,53 @@ export function computeMaps(
         ny = 0, // e: distance inside the edge, (nx, ny): outward edge normal
         a = 255;
       if (shapes) {
-        const X = px + w / 2,
-          Y = py + h / 2;
-        if (!near.some(([l, t, rr, b]) => X > l && X < rr && Y > t && Y < b)) {
-          dmap.set([128, 128, 0, 0], i); // far from every shape: outside the union, skip the work
+        // Hot loop (runs every frame while shapes move): one distance per nearby shape with its exact
+        // gradient, folded with a polynomial smooth min whose gradient is the same blend. No allocations.
+        let d = Infinity,
+          gx = 0,
+          gy = 0;
+        for (const s of S) {
+          const ox = px + w / 2 - s.cx,
+            oy = py + h / 2 - s.cy,
+            ax = Math.abs(ox),
+            ay = Math.abs(oy);
+          if (ax > s.hw + reach || ay > s.hh + reach) continue;
+          const qx = ax - s.hw + s.r,
+            qy = ay - s.hh + s.r;
+          let b,
+            bx = 0,
+            by = 0;
+          if (qx > 0 && qy > 0) {
+            const l = Math.hypot(qx, qy);
+            b = l - s.r;
+            bx = qx / l;
+            by = qy / l;
+          } else if (qx > qy) {
+            b = qx - s.r;
+            bx = 1;
+          } else {
+            b = qy - s.r;
+            by = 1;
+          }
+          if (ox < 0) bx = -bx;
+          if (oy < 0) by = -by;
+          if (d === Infinity) {
+            d = b;
+            gx = bx;
+            gy = by;
+            continue;
+          }
+          const t = Math.min(1, Math.max(0, 0.5 + (0.5 * (b - d)) / k)); // 1 keeps d, 0 takes b
+          d = b + (d - b) * t - k * t * (1 - t);
+          gx = bx + (gx - bx) * t;
+          gy = by + (gy - by) * t;
+        }
+        if (d > pad) {
+          dmap[i] = dmap[i + 1] = 128; // outside the union: neutral and transparent
+          dmap[i + 2] = dmap[i + 3] = 0;
           continue;
         }
-        const d = sdf(X, Y),
-          gx = sdf(X + 0.5, Y) - d, // forward differences: the normal only steers the bend
-          gy = sdf(X, Y + 0.5) - d,
-          gl = Math.hypot(gx, gy) || 1;
+        const gl = Math.hypot(gx, gy) || 1;
         e = -d;
         nx = gx / gl;
         ny = gy / gl;
@@ -237,12 +269,13 @@ function mapsFor(key, make) {
   return v;
 }
 
+let canvas; // one for every map: shapes re-encode each frame while they move
 function toURL(data, W, H) {
-  const c = document.createElement('canvas');
-  c.width = W;
-  c.height = H;
-  c.getContext('2d').putImageData(new ImageData(data, W, H), 0, 0);
-  return c.toDataURL();
+  canvas ??= document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  canvas.getContext('2d').putImageData(new ImageData(data, W, H), 0, 0);
+  return canvas.toDataURL();
 }
 
 function readOpts(el, opts) {
@@ -321,8 +354,8 @@ export function glass(el, opts = {}) {
       key = null;
     }
     // ~16 samples across the bezel is plenty. Shapes also carry the outline in the map, so at rest they render
-    // per device pixel to stay crisp (within ~100k map pixels: feImage pixels are re-sent every frame); while they
-    // move (re-rendering every frame) half size, sharpened once still.
+    // per device pixel to stay crisp (feImage pixels are re-sent every frame, so within a budget); while they
+    // move (re-rendering every frame) coarser, sharpened once still.
     let res = Math.min(1, Math.max(0.5, 16 / o.bezel)),
       [bx, by, bw, bh] = [0, 0, w, h];
     if (shapes) {
@@ -337,7 +370,10 @@ export function glass(el, opts = {}) {
       const g = shapes.flatMap(s => [s.x, s.y, s.w, s.h]).join(),
         moving = geo !== undefined && g !== geo;
       geo = g;
-      res = moving ? 0.5 : Math.min(2, devicePixelRatio || 1, Math.max(0.5, Math.sqrt(1e5 / (bw * bh))));
+      // pixel budgets: ~25k a frame while moving, ~100k once still
+      res = moving
+        ? Math.min(0.5, Math.sqrt(2.5e4 / (bw * bh)))
+        : Math.min(2, devicePixelRatio || 1, Math.max(0.5, Math.sqrt(1e5 / (bw * bh))));
       clearTimeout(settle);
       if (moving) settle = setTimeout(render, 150);
     }
