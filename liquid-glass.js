@@ -529,21 +529,27 @@ class LgSwitch extends Base {
     if (this.input) return;
     this.input = build(this, '<input type="checkbox" role="switch"><span class="lg-thumb" data-glass></span>');
     const squish = jelly(this.querySelector('.lg-thumb'));
-    let f = 0;
+    let on;
     onDrag(
       this,
       e => {
-        const r = this.getBoundingClientRect();
-        f = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width - 1 / 3) * 3)); // thumb centre runs from 1/3 to 2/3
+        const r = this.getBoundingClientRect(),
+          f = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width - 1 / 3) * 3)); // thumb centre runs from 1/3 to 2/3
+        // like iOS: flips on past 3/4 of the way, back off only below 1/4; release keeps what the colour shows
+        if (!this.hasAttribute('data-dragging')) on = this.input.checked;
+        if (f > 0.75) on = true;
+        else if (f < 0.25) on = false;
+        this.toggleAttribute('data-on', on);
         this.style.setProperty('--lg-f', f);
         this.toggleAttribute('data-dragging', true);
         squish(e.clientX);
       },
       (e, dragged) => {
         this.removeAttribute('data-dragging');
+        this.removeAttribute('data-on');
         this.style.removeProperty('--lg-f');
         if (!dragged || e.type !== 'pointerup') return;
-        if (f > 0.5 !== this.input.checked) this.input.click(); // native toggle, fires input + change
+        if (on !== this.input.checked) this.input.click(); // native toggle, fires input + change
         swallowClick(this);
       },
     );
@@ -1061,10 +1067,12 @@ lg-switch {
   --lg-f: 0; /* 0 = off, 1 = on; follows the finger while dragging */
   position: relative; display: inline-block; vertical-align: middle; flex: none; touch-action: pan-y; user-select: none;
   width: 4em; height: 1.75em; border-radius: 1em;
-  background: color-mix(in srgb, var(--lg-green) calc(clamp(0, var(--lg-f), 1) * 100%), light-dark(rgb(120 120 128 / .22), rgb(120 120 128 / .4)));
-  transition: --lg-f .5s var(--lg-spring);
+  background-color: light-dark(rgb(120 120 128 / .22), rgb(120 120 128 / .4));
+  transition: --lg-f .5s var(--lg-spring), background-color .2s;
   &:has(:checked) { --lg-f: 1; }
-  &[data-dragging] { transition: none; }
+  /* the colour flips, it doesn't blend: checked, or while dragging the on/off the drag has reached */
+  &:is(:has(:checked):not([data-dragging]), [data-on]) { background-color: var(--lg-green); }
+  &[data-dragging] { transition: background-color .2s; }
   &:has(:focus-visible) { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
   &:has(:disabled) { filter: grayscale(1) opacity(.5); }
   & input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
