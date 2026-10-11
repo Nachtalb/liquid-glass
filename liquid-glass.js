@@ -535,10 +535,10 @@ class LgSwitch extends Base {
       e => {
         const r = this.getBoundingClientRect(),
           f = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width - 1 / 3) * 3)); // thumb centre runs from 1/3 to 2/3
-        // like iOS: flips on past 3/4 of the way, back off only below 1/4; release keeps what the colour shows
+        // like iOS: flips on near the end of the travel, back off only near the start; release keeps the colour
         if (!this.hasAttribute('data-dragging')) on = this.input.checked;
-        if (f > 0.75) on = true;
-        else if (f < 0.25) on = false;
+        if (f > 0.85) on = true;
+        else if (f < 0.15) on = false;
         this.toggleAttribute('data-on', on);
         this.style.setProperty('--lg-f', f);
         this.toggleAttribute('data-dragging', true);
