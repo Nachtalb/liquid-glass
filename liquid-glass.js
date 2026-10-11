@@ -80,7 +80,7 @@ const sdRect = (px, py, s) => {
 export function computeMaps(
   w,
   h,
-  { radius: r, bezel, thickness, profile, ior, light, zoom, merge = 0 },
+  { radius: r, bezel, thickness, profile, ior, light, zoom, merge = 0, zmax: zrange },
   res = 1,
   shapes,
 ) {
@@ -201,7 +201,9 @@ export function computeMaps(
   // so a quarter of the map's resolution still does.
   const z = 1 - 1 / zoom,
     zmax =
-      (shapes ? Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + pad : Math.max(w, h) / 2) * Math.abs(z) || 1;
+      zrange || // given when several maps must share one scale
+      (shapes ? Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + pad : Math.max(w, h) / 2) * Math.abs(z) ||
+      1;
   const ZW = z ? (shapes ? Math.max(2, Math.ceil(W / 4)) : Math.min(32, W)) : 0,
     ZH = z ? (shapes ? Math.max(2, Math.ceil(H / 4)) : Math.min(32, H)) : 0,
     zmap = z ? new Uint8ClampedArray(ZW * ZH * 4) : null;
@@ -276,6 +278,98 @@ function toURL(data, W, H) {
   canvas.height = H;
   canvas.getContext('2d').putImageData(new ImageData(data, W, H), 0, 0);
   return canvas.toDataURL();
+}
+
+function toCanvas(data, W, H) {
+  const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
+  c.getContext('2d').putImageData(new ImageData(data, W, H), 0, 0);
+  return c;
+}
+
+// Shapes only melt with shapes in reach, so a cheap box-distance check groups them into clusters. A cluster's
+// map depends only on its own shapes' relative geometry, so it's cached: a lens moving alone, or one sitting
+// still, costs no recompute, just drawing the cached maps into one at their offsets. The map sits on a fixed
+// grid: whole-pixel steps (1/res) anchored to the element, so a lens that stays put is drawn at the same spot
+// every frame and nothing rescales (that read as flicker).
+const MOVING = [1 / 2, 1 / 3, 1 / 4, 1 / 5, 1 / 8],
+  STILL = [2, 1, 1 / 2];
+let dcan, zcan;
+function shapeMaps(shapes, o, moving, w, h) {
+  const p = o.merge / 4 + 2,
+    near = o.merge * 1.25 + 2 + p, // closer than this the union between two shapes can change
+    up = shapes.map((_, i) => i),
+    top = i => (up[i] === i ? i : (up[i] = top(up[i])));
+  for (let i = 0; i < shapes.length; i++)
+    for (let j = i + 1; j < shapes.length; j++) {
+      const a = shapes[i],
+        b = shapes[j];
+      if (
+        Math.abs(a.x + a.w / 2 - b.x - b.w / 2) - (a.w + b.w) / 2 < near &&
+        Math.abs(a.y + a.h / 2 - b.y - b.h / 2) - (a.h + b.h) / 2 < near
+      )
+        up[top(i)] = top(j);
+    }
+  const groups = Object.values(Object.groupBy(shapes, (_, i) => top(i))),
+    boxes = groups.map(g => [
+      Math.min(...g.map(s => s.x)) - p,
+      Math.min(...g.map(s => s.y)) - p,
+      Math.max(...g.map(s => s.x + s.w)) + p,
+      Math.max(...g.map(s => s.y + s.h)) + p,
+    ]),
+    x0 = Math.max(0, Math.min(...boxes.map(b => b[0]))),
+    y0 = Math.max(0, Math.min(...boxes.map(b => b[1]))),
+    area =
+      (Math.min(w, Math.max(...boxes.map(b => b[2]))) - x0) * (Math.min(h, Math.max(...boxes.map(b => b[3]))) - y0);
+  if (!(area > 0)) return null;
+  // pixel budgets: ~25k a frame while moving, ~100k once still (feImage pixels are re-sent every frame)
+  const res = moving
+      ? (MOVING.find(l => l * l * area <= 2.5e4) ?? 1 / 8)
+      : (STILL.find(l => l <= (devicePixelRatio || 1) && l * l * area <= 1e5) ?? 1 / 2),
+    g = 4 * Math.max(1, 1 / res), // grid step in css px, whole; 4× as the zoom map is a quarter the resolution
+    bx = Math.floor(x0 / g) * g,
+    by = Math.floor(y0 / g) * g,
+    ew = Math.min(w, Math.max(...boxes.map(b => b[2]))) - bx,
+    eh = Math.min(h, Math.max(...boxes.map(b => b[3]))) - by,
+    W = Math.ceil(ew * res),
+    H = Math.ceil(eh * res),
+    zmax = (Math.max(...shapes.map(s => Math.max(s.w, s.h) / 2)) + p) * Math.abs(1 - 1 / o.zoom) || 1;
+  const parts = groups.map((g, i) => {
+    const [cx, cy, cx1, cy1] = boxes[i],
+      cw = Math.ceil((cx1 - cx) * res) / res,
+      ch = Math.ceil((cy1 - cy) * res) / res,
+      rel = g.map(s => ({ ...s, x: s.x - cx, y: s.y - cy })),
+      k = [cw, ch, res, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom, o.merge, zmax]
+        .concat(rel.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(v => Math.round(v * 4))))
+        .join();
+    const m = mapsFor(k, () => {
+      const r = computeMaps(cw, ch, { ...o, zmax }, res, rel);
+      return { d: toCanvas(r.dmap, r.W, r.H), z: r.zmap && toCanvas(r.zmap, r.ZW, r.ZH), cw, ch, scale: r.scale };
+    });
+    return { m, k, x: (cx - bx) * res, y: (cy - by) * res };
+  });
+  return {
+    bx,
+    by,
+    bw: W / res,
+    bh: H / res,
+    scale: parts[0].m.scale,
+    zscale: 2 * zmax,
+    key: [W, H, res].concat(parts.map(q => `${q.k}@${q.x},${q.y}`)).join('|'),
+    urls() {
+      dcan ??= document.createElement('canvas');
+      Object.assign(dcan, { width: W, height: H }); // also clears it
+      const dc = dcan.getContext('2d');
+      for (const q of parts) dc.drawImage(q.m.d, q.x, q.y); // sub-pixel offsets resample bilinearly
+      if (!parts[0].m.z) return { d: dcan.toDataURL() };
+      zcan ??= document.createElement('canvas');
+      Object.assign(zcan, { width: Math.ceil(W / 4), height: Math.ceil(H / 4) });
+      const zc = zcan.getContext('2d');
+      zc.fillStyle = 'rgb(128 128 128)'; // no zoom between clusters
+      zc.fillRect(0, 0, zcan.width, zcan.height);
+      for (const q of parts) zc.drawImage(q.m.z, q.x / 4, q.y / 4, (q.m.cw * res) / 4, (q.m.ch * res) / 4);
+      return { d: dcan.toDataURL(), z: zcan.toDataURL() };
+    },
+  };
 }
 
 function readOpts(el, opts) {
@@ -356,51 +450,43 @@ export function glass(el, opts = {}) {
     // ~16 samples across the bezel is plenty. Shapes also carry the outline in the map, so at rest they render
     // per device pixel to stay crisp (feImage pixels are re-sent every frame, so within a budget); while they
     // move (re-rendering every frame) coarser, sharpened once still.
-    let res = Math.min(1, Math.max(0.5, 16 / o.bezel)),
+    let m,
       [bx, by, bw, bh] = [0, 0, w, h];
     if (shapes) {
       // only the shapes' bounding box costs anything: the pane (::before) shrinks to it. Moving the pane, not
-      // the map: Chromium misplaces a backdrop filter's feImage that doesn't start at 0, 0
-      const p = o.merge / 4 + 2;
-      bx = Math.max(0, Math.floor(Math.min(...shapes.map(s => s.x)) - p));
-      by = Math.max(0, Math.floor(Math.min(...shapes.map(s => s.y)) - p));
-      bw = Math.min(w, Math.ceil(Math.max(...shapes.map(s => s.x + s.w)) + p)) - bx;
-      bh = Math.min(h, Math.ceil(Math.max(...shapes.map(s => s.y + s.h)) + p)) - by;
-      if (bw <= 0 || bh <= 0) return;
+      // the map: Chromium misplaces a backdrop filter's feImage that doesn't start at 0, 0.
+      // Shapes also carry the outline in the map, so at rest they render per device pixel to stay crisp; while
+      // they move (re-rendering every frame) coarser, sharpened once still.
       const g = shapes.flatMap(s => [s.x, s.y, s.w, s.h]).join(),
         moving = geo !== undefined && g !== geo;
       geo = g;
-      // pixel budgets: ~25k a frame while moving, ~100k once still
-      res = moving
-        ? Math.min(0.5, Math.sqrt(2.5e4 / (bw * bh)))
-        : Math.min(2, devicePixelRatio || 1, Math.max(0.5, Math.sqrt(1e5 / (bw * bh))));
       clearTimeout(settle);
       if (moving) settle = setTimeout(render, 150);
+      m = shapeMaps(shapes, o, moving, w, h);
+      if (!m) return;
+      ({ bx, by, bw, bh } = m);
+    } else {
+      const res = Math.min(1, Math.max(0.5, 16 / o.bezel)), // ~16 samples across the bezel is plenty
+        k = [w, h, res, o.radius, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom].join();
+      m = {
+        key: k,
+        ...mapsFor(k, () => {
+          const r = computeMaps(w, h, o, res);
+          return {
+            d: toURL(r.dmap, r.W, r.H),
+            z: r.zmap && toURL(r.zmap, r.ZW, r.ZH),
+            scale: r.scale,
+            zscale: r.zscale,
+          };
+        }),
+      };
     }
-    const rel = shapes?.map(s => ({ ...s, x: s.x - bx, y: s.y - by }));
-    const k = [
-      bw,
-      bh,
-      res,
-      o.radius,
-      o.bezel,
-      o.thickness,
-      o.profile,
-      o.ior,
-      o.light,
-      o.zoom,
-      o.merge,
-      rel?.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(Math.round)),
-    ].join();
-    const m = mapsFor(k, () => {
-      const r = computeMaps(bw, bh, o, res, rel);
-      return { d: toURL(r.dmap, r.W, r.H), z: r.zmap && toURL(r.zmap, r.ZW, r.ZH), scale: r.scale, zscale: r.zscale };
-    });
-    const fresh = k !== key;
-    key = k;
-    for (const [img, url] of [
-      [fe.map, m.d],
-      [fe.zmap, m.z],
+    const fresh = m.key !== key,
+      urls = fresh && (m.urls ? mapsFor(m.key, m.urls) : m);
+    key = m.key;
+    for (const [img, u] of [
+      [fe.map, 'd'],
+      [fe.zmap, 'z'],
     ]) {
       if (!img) continue;
       for (const [a, v] of [
@@ -410,7 +496,7 @@ export function glass(el, opts = {}) {
         ['height', bh],
       ])
         img.setAttribute(a, v);
-      if (fresh) img.setAttribute('href', url);
+      if (fresh) img.setAttribute('href', urls[u]);
     }
     // set on every glass element, so a nested one doesn't inherit its ancestor's
     el.style.setProperty('--lg-inset', `${by}px ${w - bx - bw}px ${h - by - bh}px ${bx}px`);
