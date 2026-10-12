@@ -497,14 +497,14 @@ export function glass(el, opts = {}) {
     let m;
     if (shapes) {
       // Shapes carry the outline in the map, so they render per device pixel to stay crisp, moving or not, within
-      // ~150k pixels for the largest shape (feImage pixels are re-sent every frame), on fixed levels so it never
+      // ~40k pixels for the largest shape (feImage pixels are re-sent every frame), on fixed levels so it never
       // drifts. Level and zoom scale come from the largest side and area of the whole group (opts.size: every pane
       // of an lg-merge), so a shape renders the same alone as next to another.
       const [side, area] = opts.size?.() ?? [
           Math.max(...shapes.flatMap(s => [s.w, s.h])),
           Math.max(...shapes.map(s => s.w * s.h)),
         ],
-        res = LEVELS.find(l => l <= (devicePixelRatio || 1) && l * l * area <= 1.5e5) ?? 1 / 2,
+        res = LEVELS.find(l => l <= (devicePixelRatio || 1) && l * l * area <= 4e4) ?? 1 / 2,
         k = [w, h, res, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom, o.merge, (o.side = side)]
           .concat(shapes.flatMap(s => [s.x, s.y, s.w, s.h, s.r].map(v => Math.round(v * 4))))
           .join();
@@ -523,7 +523,9 @@ export function glass(el, opts = {}) {
         }),
       };
     } else {
-      const res = Math.min(1, Math.max(0.5, 16 / o.bezel)), // ~16 samples across the bezel is plenty
+      // ~16 samples across the bezel is plenty, and big panes stay within ~30k pixels (re-sent every frame): the
+      // interior is flat and the bezel smooth, so half resolution upscales cleanly
+      const res = Math.min(1, Math.max(0.5, Math.min(16 / o.bezel, Math.sqrt(3e4 / (w * h))))),
         k = [w, h, res, o.radius, o.bezel, o.thickness, o.profile, o.ior, o.light, o.zoom].join();
       m = {
         key: k,
