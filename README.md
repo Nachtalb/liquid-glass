@@ -10,7 +10,8 @@ One ES module, no dependencies, latest Chromium only.
 ## Use
 
 ```html
-<script type="module" src="liquid-glass.min.js"></script>
+<!-- in <head>; blocking="render" holds the first paint until its styles are in, so nothing flashes unstyled -->
+<script type="module" blocking="render" src="liquid-glass.min.js"></script>
 
 <div data-glass style="border-radius: 24px">any element</div>
 <button class="lg-btn" data-glass>Button</button>

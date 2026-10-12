@@ -15,6 +15,8 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
     />
+    <!-- in <head>, render-blocking: the page first paints with the library's styles, not as raw HTML -->
+    <script type="module" blocking="render" src="liquid-glass.min.js"></script>
     <script>
       // restore a theme picked with the toggle before first paint, so there's no flash
       try {
@@ -1397,8 +1399,9 @@ toast(node, { duration: 0 }); // stays until swiped away</code></pre>
           <p class="eyebrow">Reference</p>
           <h2>API</h2>
           <p>
-            Load the module once with <code>&lt;script type="module" src="liquid-glass.js"&gt;&lt;/script&gt;</code>. It
-            adds its styles in a cascade layer, so any unlayered CSS of yours wins.
+            Load the module once in <code>&lt;head&gt;</code> with
+            <code>&lt;script type="module" blocking="render" src="liquid-glass.js"&gt;&lt;/script&gt;</code>, so the
+            page first paints with its styles. It adds them in a cascade layer, so any unlayered CSS of yours wins.
           </p>
         </div>
         <div class="api-grid">
