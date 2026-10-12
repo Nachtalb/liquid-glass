@@ -663,9 +663,12 @@
       .dock {
         position: fixed;
         z-index: 10;
-        left: 50%;
+        /* centred by auto margins: left: 50% would cap a fit-content width at half the screen */
+        inset-inline: 0;
+        margin-inline: auto;
+        width: max-content;
+        max-width: calc(100% - 24px);
         bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-        translate: -50% 0;
         color: var(--fg);
         --lg-tint: color-mix(in srgb, var(--bg) 45%, transparent);
         --lg-blur: 1.5;
